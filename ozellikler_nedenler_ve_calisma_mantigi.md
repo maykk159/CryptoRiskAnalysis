@@ -10,7 +10,7 @@ Uygulama, yüksek performanslı finansal veri analizi yapabilmek, API kısıtlam
 
 | Katman / Bileşen | Kullanılan Teknoloji / Kütüphane | Seçim Nedeni |
 | :--- | :--- | :--- |
-| **Backend Core** | **.NET 8 (C#)** | Yüksek işlem performansı, güçlü tip güvenliği (Type Safety), asenkron programlama yetenekleri ve kurumsal mimari standartlarına tam uyum sağlaması. |
+| **Backend Core** | **.NET 10 (C#)** | Yüksek işlem performansı, güçlü tip güvenliği (Type Safety), asenkron programlama yetenekleri ve kurumsal mimari standartlarına tam uyum sağlaması. |
 | **Frontend Core** | **React 19 & TypeScript & Vite** | Hızlı arayüz güncellemeleri (Virtual DOM), statik tip denetimi ile hata payının azaltılması ve Vite'in sağladığı yıldırım hızındaki geliştirme/derleme süresi. |
 | **Veri Görselleştirme** | **Recharts (React)** | Finansal grafikleri çizmek için SVG tabanlı, duyarlı (responsive) ve dinamik olarak güncellenebilen performanslı bir kütüphane olması. |
 | **Hata Toleransı** | **Polly (C#)** | Dış servis bağlantılarında geçici hataları ve hız sınırlarını (Rate Limit - 429) otomatik yönetmek amacıyla endüstri standardı olması. |

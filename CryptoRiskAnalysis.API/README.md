@@ -1,6 +1,6 @@
 # 🔧 Backend - Crypto Risk Analysis API
 
-.NET 8 Web API with Clean Architecture for cryptocurrency risk analysis.
+.NET 10 Web API with Clean Architecture for cryptocurrency risk analysis.
 
 ## 📋 Requirements
 
@@ -14,7 +14,7 @@
 .NET SDK: 8.0.11
 C#: 12.0
 ASP.NET Core: 8.0
-Target Framework: net8.0
+Target Framework: net10.0
 ```
 
 ### NuGet Packages

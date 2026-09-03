@@ -7,7 +7,7 @@ Write-Host "🚀 Starting CryptoRiskAnalysis Setup..." -ForegroundColor Cyan
 Write-Host "`n🔍 Checking prerequisites..." -ForegroundColor Yellow
 
 if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
-    Write-Error "❌ .NET SDK not found! Please install .NET 8 SDK: https://dotnet.microsoft.com/download/dotnet/8.0"
+    Write-Error "❌ .NET SDK not found! Please install .NET 10 SDK: https://dotnet.microsoft.com/download/dotnet/10.0"
 }
 Write-Host "✅ .NET SDK found" -ForegroundColor Green
 
@@ -17,7 +17,7 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 Write-Host "✅ Node.js found" -ForegroundColor Green
 
 # 2. Setup Backend
-Write-Host "`n📦 Setting up Backend (.NET 8)..." -ForegroundColor Yellow
+Write-Host "`n📦 Setting up Backend (.NET 10)..." -ForegroundColor Yellow
 Push-Location "CryptoRiskAnalysis.API"
 try {
     dotnet restore
