@@ -8,7 +8,7 @@ Before running the setup script, ensure your machine has the following tools ins
 
 | Tool | Version | Purpose | Download Link |
 |------|---------|---------|---------------|
-| **.NET SDK** | **8.0** or later | Backend Runtime | [Download .NET 8](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| **.NET SDK** | **10.0** or later | Backend Runtime | [Download .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) |
 | **Node.js** | **v18** or later | Frontend Runtime | [Download Node.js](https://nodejs.org/) |
 | **Git** | Latest | Version Control | [Download Git](https://git-scm.com/) |
 
@@ -30,7 +30,7 @@ We have provided a unified setup script to install all dependencies for you.
 2.  Right-click the file and select **Run with PowerShell**.
 
 > **What this script does:**
-> 1.  Checks if `.NET 8` and `Node.js` are installed.
+> 1.  Checks if `.NET 10` and `Node.js` are installed.
 > 2.  Restores NuGet packages for the API.
 > 3.  Installs npm packages for the React Client.
 

@@ -6,7 +6,7 @@ Bu doküman, projede bulunan tüm dosyaların genel taraması sonucunda sistemin
 
 Proje temel olarak iki ana bileşenden (Backend ve Frontend) oluşan tam yığın (Full-Stack) bir uygulamadır.
 
-### Backend (.NET 8 Web API - `CryptoRiskAnalysis.API/` klasörü)
+### Backend (.NET 10 Web API - `CryptoRiskAnalysis.API/` klasörü)
 *   **Controllers (`RiskAnalysisController.cs`)**: Kullanıcıdan ve arayüzden gelen HTTP (REST) taleplerini karşılayan ve sistemin dışa açılan tek kapısıdır.
 *   **Services (Servis Katmanı)**:
     *   `HybridCryptoDataService.cs`: Ana veri akışını yöneten yapıdır. Binance ve CoinGecko API'lerini birleştirerek hataya dayanıklı bir "hibrit" mimari sunar.
@@ -49,7 +49,7 @@ Proje temel olarak iki ana bileşenden (Backend ve Frontend) oluşan tam yığı
 
 Kullanıcı arayüzde bir işlem yaptığında arka planda sistem şu şekilde çalışır:
 
-1.  **Talep (Frontend):** Kullanıcı "AssetSelector" üzerinden örneğin "Ethereum (ETH)" seçer. React uygulaması (client), `.NET 8` Backend'inin `RiskAnalysisController`'ına bir istek gönderir.
+1.  **Talep (Frontend):** Kullanıcı "AssetSelector" üzerinden örneğin "Ethereum (ETH)" seçer. React uygulaması (client), `.NET 10` Backend'inin `RiskAnalysisController`'ına bir istek gönderir.
 2.  **Veri Toplama (Services):** `HybridCryptoDataService` devreye girer. 
     *   Önce belleğe bakar: "Son 1 dakika içinde ETH verisi çekilmiş mi?" Çekilmişse direkt onu alır.
     *   Çekilmemişse `BinanceSpotService`'e gider ve Binance'den son 30 günün mum verilerini (`OHLCV`) çeker. Hata olursa CoinGecko'ya geçer.
