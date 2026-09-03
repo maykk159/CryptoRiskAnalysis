@@ -3,7 +3,7 @@
 > **Professional Financial Risk Assessment for Cryptocurrency Assets**
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0-purple.svg)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-10.0-purple.svg)](https://dotnet.microsoft.com/)
 [![React](https://img.shields.io/badge/React-19.2-blue.svg)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 
@@ -11,7 +11,7 @@
 
 **CryptoRiskAnalysis** is a high-performance, full-stack application designed to deliver institutional-grade risk metrics for digital assets. By leveraging a **Hybrid Data Engine**, it seamlessly aggregates real-time market data from **Binance Spot API** and **CoinGecko**, providing robust volatility tracking, trend analysis, and advanced financial indicators.
 
-Built with **.NET 8 Clean Architecture** and a responsive **React/TypeScript** frontend, the platform ensures low-latency calculations and a premium user experience.
+Built with **.NET 10 Clean Architecture** and a responsive **React/TypeScript** frontend, the platform ensures low-latency calculations and a premium user experience.
 
 ---
 
@@ -40,7 +40,7 @@ Built with **.NET 8 Clean Architecture** and a responsive **React/TypeScript** f
 
 | Component | Technology | Description |
 |-----------|------------|-------------|
-| **Backend** | .NET 8 (C#) | ASP.NET Core Web API, Clean Architecture, Dependency Injection |
+| **Backend** | .NET 10 (C#) | ASP.NET Core Web API, Clean Architecture, Dependency Injection |
 | **Frontend** | React 19, TypeScript | Vite, Tailwind CSS, Recharts, Axios |
 | **Data Layer** | Hybrid Service | Binance API (Primary) + CoinGecko API (Fallback) |
 | **Caching** | IMemoryCache | In-memory distributed caching strategy |
@@ -51,7 +51,7 @@ Built with **.NET 8 Clean Architecture** and a responsive **React/TypeScript** f
 ## 🚀 Getting Started
 
 ### Prerequisites
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [.NET 10.0 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Node.js 18+](https://nodejs.org/)
 
 > **💡 Quick Setup**: Use our [Setup Script](REQUIREMENTS.md) for dependencies.
@@ -107,7 +107,7 @@ The platform employs industry-standard financial models adapted for the crypto m
 
 ```
 CryptoRiskAnalysis/
-├── CryptoRiskAnalysis.API/    # .NET 8 Backend Solution
+├── CryptoRiskAnalysis.API/    # .NET 10 Backend Solution
 │   ├── Controllers/           # REST API Endpoints
 │   ├── Services/              # Business Logic & Data Services
 │   ├── Models/                # Domain Entities
