@@ -6,6 +6,7 @@ using CryptoRiskAnalysis.API.Controllers;
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Models;
 using CryptoRiskAnalysis.API.DTOs;
+using CryptoRiskAnalysis.API.Exceptions;
 using CryptoRiskAnalysis.API.Wrappers;
 
 namespace CryptoRiskAnalysis.Tests.Controllers
@@ -33,11 +34,13 @@ namespace CryptoRiskAnalysis.Tests.Controllers
         {
             // Arrange
             var assetId = "bitcoin";
-            var priceHistory = new List<PriceData>
-            {
-                new PriceData { Timestamp = 1000, Price = 100m },
-                new PriceData { Timestamp = 2000, Price = 105m }
-            };
+            var priceHistory = Enumerable.Range(0, 30)
+                .Select(i => new PriceData
+                {
+                    Timestamp = DateTimeOffset.UtcNow.AddDays(-30 + i).ToUnixTimeMilliseconds(),
+                    Price = 100m + i
+                })
+                .ToList();
 
             var riskResult = new RiskScoreResult
             {
@@ -104,6 +107,27 @@ namespace CryptoRiskAnalysis.Tests.Controllers
         }
 
         [Fact]
+        public async Task GetRiskAnalysis_InsufficientData_RejectsReport()
+        {
+            var assetId = "bitcoin";
+            var priceHistory = new List<PriceData>
+            {
+                new() { Timestamp = 1000, Price = 100m },
+                new() { Timestamp = 2000, Price = 105m }
+            };
+            _mockCryptoService
+                .Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
+                .ReturnsAsync((priceHistory, 1000m, 900m));
+
+            await Assert.ThrowsAsync<MarketDataProviderException>(() =>
+                _controller.GetRiskAnalysis(assetId, 30, TestContext.Current.CancellationToken));
+
+            _mockRiskEngine.Verify(
+                engine => engine.CalculateRisk(It.IsAny<List<PriceData>>(), It.IsAny<decimal>(), It.IsAny<decimal>()),
+                Times.Never);
+        }
+
+        [Fact]
         public async Task GetRiskAnalysis_ServiceThrowsException_ThrowsExceptionToMiddleware()
         {
             // Arrange
@@ -117,16 +141,15 @@ namespace CryptoRiskAnalysis.Tests.Controllers
         }
 
         [Fact]
-        public async Task GetRiskAnalysis_FiltersHistoryToRequestedDays()
+        public async Task GetRiskAnalysis_UsesRequestedWindowForAllMetrics()
         {
-            // Arrange - Service returns 30 days, but user requested 7
             var assetId = "bitcoin";
             var priceHistory = new List<PriceData>();
-            for (int i = 0; i < 30; i++)
+            for (int i = 0; i < 7; i++)
             {
                 priceHistory.Add(new PriceData
                 {
-                    Timestamp = DateTimeOffset.UtcNow.AddDays(-30 + i).ToUnixTimeMilliseconds(),
+                    Timestamp = DateTimeOffset.UtcNow.AddDays(-7 + i).ToUnixTimeMilliseconds(),
                     Price = 100m + i
                 });
             }
@@ -137,19 +160,22 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 PriceHistory = priceHistory
             };
 
-            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
+            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 7, It.IsAny<CancellationToken>()))
                 .ReturnsAsync((priceHistory, 1000m, 900m));
-            _mockRiskEngine.Setup(e => e.CalculateRisk(It.IsAny<List<PriceData>>(), 1000m, 900m))
+            _mockRiskEngine.Setup(e => e.CalculateRisk(priceHistory, 1000m, 900m))
                 .Returns(riskResult);
 
             // Act - Request 7 days
             var result = await _controller.GetRiskAnalysis(assetId, 7);
 
-            // Assert - Response should only contain 7 days
             var okResult = Assert.IsType<OkObjectResult>(result.Result);
             var response = Assert.IsType<ApiResponse<RiskAnalysisResponseDto>>(okResult.Value);
             Assert.NotNull(response.Data);
             Assert.Equal(7, response.Data!.PriceHistory.Count);
+            _mockCryptoService.Verify(
+                service => service.GetAllMarketDataAsync(assetId, 7, It.IsAny<CancellationToken>()),
+                Times.Once);
+            _mockRiskEngine.Verify(engine => engine.CalculateRisk(priceHistory, 1000m, 900m), Times.Once);
         }
     }
 }

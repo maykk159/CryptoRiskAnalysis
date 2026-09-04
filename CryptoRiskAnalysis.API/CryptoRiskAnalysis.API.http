@@ -1,6 +1,8 @@
 @CryptoRiskAnalysis.API_HostAddress = http://localhost:5058
+@AssetId = bitcoin
+@Days = 30
 
-GET {{CryptoRiskAnalysis.API_HostAddress}}/weatherforecast/
+GET {{CryptoRiskAnalysis.API_HostAddress}}/api/RiskAnalysis/{{AssetId}}?days={{Days}}
 Accept: application/json
 
 ###

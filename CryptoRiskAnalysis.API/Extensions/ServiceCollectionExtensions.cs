@@ -1,7 +1,6 @@
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Services;
-using Polly;
-using Polly.Extensions.Http;
+using Microsoft.Extensions.Http.Resilience;
 using System.Threading.RateLimiting;
 
 namespace CryptoRiskAnalysis.API.Extensions
@@ -13,19 +12,13 @@ namespace CryptoRiskAnalysis.API.Extensions
             // Add Memory Cache
             services.AddMemoryCache();
 
-            // Register API Services with HttpClient + Polly retry policy
-            // Retries up to 3 times on transient errors (5xx, network) and 429 with exponential backoff
-            services.AddHttpClient<BinanceSpotService>(client =>
-                client.Timeout = TimeSpan.FromSeconds(30))
-                .AddPolicyHandler(GetRetryPolicy())
-                .AddPolicyHandler(GetCircuitBreakerPolicy())
-                .AddPolicyHandler(GetTimeoutPolicy());
+            // Retry transient failures and 429 responses up to three times with
+            // exponential backoff, with per-attempt and total request timeouts.
+            services.AddHttpClient<BinanceSpotService>()
+                .AddStandardResilienceHandler(ConfigureMarketDataResilience);
 
-            services.AddHttpClient<CoinGeckoService>(client =>
-                client.Timeout = TimeSpan.FromSeconds(30))
-                .AddPolicyHandler(GetRetryPolicy())
-                .AddPolicyHandler(GetCircuitBreakerPolicy())
-                .AddPolicyHandler(GetTimeoutPolicy());
+            services.AddHttpClient<CoinGeckoService>()
+                .AddStandardResilienceHandler(ConfigureMarketDataResilience);
 
             // Register HybridCryptoDataService as the single implementation of ICryptoDataService
             services.AddScoped<ICryptoDataService, HybridCryptoDataService>();
@@ -65,34 +58,19 @@ namespace CryptoRiskAnalysis.API.Extensions
         }
 
         /// <summary>
-        /// Polly retry policy: retries up to 3 times with exponential backoff (2s → 4s → 8s)
-        /// on transient HTTP errors (5xx, network failures) and 429 TooManyRequests.
-        /// This replaces the manual for-loop retry logic that was in each service.
+        /// Configures the standard HTTP resilience pipeline for market-data providers.
+        /// The standard retry strategy handles network failures, timeouts, 5xx, 408, and 429 responses.
         /// </summary>
-        private static IAsyncPolicy<HttpResponseMessage> GetRetryPolicy()
+        private static void ConfigureMarketDataResilience(HttpStandardResilienceOptions options)
         {
-            return HttpPolicyExtensions
-                .HandleTransientHttpError() // HttpRequestException, 5xx
-                .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests) // 429
-                .WaitAndRetryAsync(
-                    retryCount: 3,
-                    sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))
-                );
-        }
-
-        private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
-        {
-            return HttpPolicyExtensions
-                .HandleTransientHttpError()
-                .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                .CircuitBreakerAsync(
-                    handledEventsAllowedBeforeBreaking: 5,
-                    durationOfBreak: TimeSpan.FromSeconds(30));
-        }
-
-        private static IAsyncPolicy<HttpResponseMessage> GetTimeoutPolicy()
-        {
-            return Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(10));
+            options.Retry.MaxRetryAttempts = 3;
+            options.Retry.Delay = TimeSpan.FromSeconds(2);
+            options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
+            options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
+            options.CircuitBreaker.FailureRatio = 1.0;
+            options.CircuitBreaker.MinimumThroughput = 5;
+            options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
+            options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
         }
     }
 }

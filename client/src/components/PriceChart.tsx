@@ -8,6 +8,27 @@ interface PriceChartProps {
     timeRange: number;
 }
 
+const formatUsdPrice = (value: number) => {
+    if (!Number.isFinite(value)) {
+        return '$—';
+    }
+
+    const absoluteValue = Math.abs(value);
+
+    if (absoluteValue !== 0 && absoluteValue < 1e-20) {
+        return `$${value.toLocaleString('en-US', {
+            notation: 'scientific',
+            maximumSignificantDigits: 6
+        })}`;
+    }
+
+    const maximumFractionDigits = absoluteValue > 0 && absoluteValue < 1
+        ? Math.min(20, Math.max(3, 5 - Math.floor(Math.log10(absoluteValue))))
+        : 3;
+
+    return `$${value.toLocaleString('en-US', { maximumFractionDigits })}`;
+};
+
 export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
     const formattedData = React.useMemo(() => data.map(d => {
         const dateObj = new Date(d.timestamp);
@@ -58,7 +79,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
                             tickLine={false}
                             axisLine={false}
                             domain={['auto', 'auto']}
-                            tickFormatter={(value) => `$${value.toLocaleString('en-US')}`}
+                            tickFormatter={formatUsdPrice}
                         />
                         <Tooltip
                             contentStyle={{ 
@@ -70,7 +91,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
                                 boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.5)'
                             }}
                             itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
-                            formatter={(value: number) => [`$${value.toLocaleString('en-US')}`, 'Price']}
+                            formatter={(value: number) => [formatUsdPrice(value), 'Price']}
                             labelFormatter={(label) => new Date(label).toLocaleDateString('en-US', {
                                 weekday: 'short',
                                 year: 'numeric',

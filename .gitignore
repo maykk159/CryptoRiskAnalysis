@@ -19,7 +19,6 @@ bld/
 
 # Visual Studio cache/options
 .vs/
-.vscode/
 *.suo
 *.user
 *.userosscache
@@ -77,6 +76,8 @@ node_modules/
 
 # Testing
 /coverage
+/client/coverage/
+**/[Tt]est[Rr]esults/
 
 # Production build
 /build
@@ -87,6 +88,9 @@ node_modules/
 .DS_Store
 .env
 .env.local
+.env.development
+.env.test
+.env.production
 .env.development.local
 .env.test.local
 .env.production.local

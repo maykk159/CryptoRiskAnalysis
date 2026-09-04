@@ -100,11 +100,14 @@ On Windows, `setup.ps1` performs the same dependency setup:
 
 ### 3. Start the API
 
-From the repository root:
+From the repository root, move into the API project directory:
 
 ```bash
-dotnet run --project CryptoRiskAnalysis.API/CryptoRiskAnalysis.API.csproj
+cd CryptoRiskAnalysis.API
+dotnet run
 ```
+
+Press `Ctrl+C` to stop the API. Because the terminal remains in the API directory, you can start it again with just `dotnet run`.
 
 The development API listens on `http://localhost:5058`. Swagger UI is available at [http://localhost:5058/swagger](http://localhost:5058/swagger).
 
@@ -223,7 +226,7 @@ The API also accepts other valid CoinGecko asset IDs. Assets without a Binance m
 Run the backend test suite:
 
 ```bash
-dotnet test CryptoRiskAnalysis.API.sln
+dotnet test
 ```
 
 Validate the frontend:

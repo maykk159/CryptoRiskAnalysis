@@ -33,6 +33,9 @@ namespace CryptoRiskAnalysis.API.Services
             int days,
             CancellationToken cancellationToken = default)
         {
+            if (days <= 0)
+                throw new ArgumentOutOfRangeException(nameof(days), "The requested day count must be positive.");
+
             string cacheKey = $"market_data_{assetId}_{days}";
 
             // Check cache first
@@ -45,11 +48,13 @@ namespace CryptoRiskAnalysis.API.Services
             _logger.LogInformation("CoinGecko Cache MISS for {AssetId} — fetching from API", assetId);
 
             // Polly handles retries on 429 and transient errors — no manual loop needed
+            // Request one extra day because CoinGecko may include today's still-open UTC candle.
+            var providerDays = (long)days + 1;
             HttpResponseMessage response;
             try
             {
                 response = await _httpClient.GetAsync(
-                    $"{BaseUrl}/coins/{assetId}/market_chart?vs_currency=usd&days={days}&interval=daily",
+                    $"{BaseUrl}/coins/{assetId}/market_chart?vs_currency=usd&days={providerDays}&interval=daily",
                     cancellationToken);
             }
             catch (HttpRequestException ex)
@@ -80,27 +85,33 @@ namespace CryptoRiskAnalysis.API.Services
 
                 if (data?.Prices == null || data.Total_Volumes == null)
                 {
-                    _logger.LogWarning("CoinGecko returned null or empty data for {AssetId}", assetId);
-                    return (new List<PriceData>(), 0, 0);
+                    throw new MarketDataProviderException("CoinGecko", "the price or volume series was missing.");
                 }
 
                 // CoinGecko can append a live intraday point even when daily granularity is
                 // requested. Keep UTC-midnight daily points and completed previous days only.
-                var priceHistory = NormalizeCompletedDailyValues(data.Prices)
+                var normalizedPrices = NormalizeCompletedDailyValues(data.Prices, "price")
                     .TakeLast(days)
-                    .Select(p => new PriceData
-                    {
-                        Timestamp = (long)p[0],
-                        Price = (decimal)p[1]
-                    })
+                    .ToList();
+                var normalizedVolumes = NormalizeCompletedDailyValues(data.Total_Volumes, "volume")
+                    .TakeLast(days)
                     .ToList();
 
-                var volumes = NormalizeCompletedDailyValues(data.Total_Volumes)
-                    .TakeLast(days)
-                    .Select(v => (decimal)v[1])
+                var priceHistory = normalizedPrices
+                    .Select(point => new PriceData
+                    {
+                        Timestamp = point.Timestamp,
+                        Price = point.Value
+                    })
                     .ToList();
-                var currentVolume = volumes.Count > 0 ? volumes.Last() : 0;
-                var avgVolume = volumes.Count > 0 ? volumes.Average() : 0;
+                var volumeHistory = normalizedVolumes
+                    .Select(point => (point.Timestamp, Volume: point.Value))
+                    .ToList();
+
+                MarketDataValidator.ValidateCompletedDailySeries("CoinGecko", priceHistory, volumeHistory, days);
+
+                var currentVolume = volumeHistory[^1].Volume;
+                var avgVolume = volumeHistory.Average(point => point.Volume);
 
                 var result = (priceHistory, currentVolume, avgVolume);
 
@@ -115,52 +126,62 @@ namespace CryptoRiskAnalysis.API.Services
             }
         }
 
-        private static IEnumerable<List<double>> NormalizeCompletedDailyValues(IEnumerable<List<double>> values)
+        private static IEnumerable<DailyValue> NormalizeCompletedDailyValues(
+            IEnumerable<List<double>> values,
+            string fieldName)
         {
             var todayUtc = DateTime.UtcNow.Date;
+            var parsedValues = new List<DailyValue>();
 
-            return values
-                .Where(value => value.Count >= 2)
-                .Where(value =>
+            foreach (var value in values)
+            {
+                if (value.Count < 2 || !double.IsFinite(value[0]) || !double.IsFinite(value[1]))
                 {
-                    var timestamp = DateTimeOffset.FromUnixTimeMilliseconds((long)value[0]).UtcDateTime;
-                    return timestamp.Date < todayUtc || timestamp.TimeOfDay == TimeSpan.Zero;
-                })
-                .GroupBy(value => DateTimeOffset.FromUnixTimeMilliseconds((long)value[0]).UtcDateTime.Date)
-                .Select(group => group.OrderBy(value => value[0]).Last())
-                .OrderBy(value => value[0]);
+                    throw new MarketDataProviderException(
+                        "CoinGecko",
+                        $"a {fieldName} observation was malformed or non-finite.");
+                }
+
+                try
+                {
+                    if (Math.Truncate(value[0]) != value[0])
+                        throw new OverflowException("Timestamp was not an integer.");
+
+                    var timestamp = checked((long)value[0]);
+                    var date = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.Date;
+                    var numericValue = checked((decimal)value[1]);
+
+                    if (fieldName == "price" && numericValue <= 0)
+                        throw new MarketDataProviderException("CoinGecko", "a price observation was zero or negative.");
+                    if (fieldName == "volume" && numericValue < 0)
+                        throw new MarketDataProviderException("CoinGecko", "a volume observation was negative.");
+
+                    // Today's UTC candle is still open, including a point timestamped at midnight.
+                    if (date < todayUtc)
+                        parsedValues.Add(new DailyValue(timestamp, date, numericValue));
+                }
+                catch (Exception ex) when (ex is ArgumentOutOfRangeException or OverflowException)
+                {
+                    throw new MarketDataProviderException(
+                        "CoinGecko",
+                        $"a {fieldName} observation contained an invalid timestamp or numeric value.",
+                        ex);
+                }
+            }
+
+            return parsedValues
+                .GroupBy(value => value.Date)
+                .Select(group => group.OrderBy(value => value.Timestamp).Last())
+                .OrderBy(value => value.Timestamp);
         }
 
-        // Legacy methods — not used in optimized flow, but required by interface
-        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(
-            string assetId,
-            int days,
-            CancellationToken cancellationToken = default)
-        {
-            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
-            return priceHistory;
-        }
-
-        public async Task<decimal> GetCurrentVolumeAsync(string assetId, CancellationToken cancellationToken = default)
-        {
-            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1, cancellationToken);
-            return currentVolume;
-        }
-
-        public async Task<decimal> GetAverageVolumeAsync(
-            string assetId,
-            int days,
-            CancellationToken cancellationToken = default)
-        {
-            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
-            return avgVolume;
-        }
+        private readonly record struct DailyValue(long Timestamp, DateTime Date, decimal Value);
 
         // Helper class for deserialization
         private class CoinGeckoMarketChart
         {
-            public List<List<double>> Prices { get; set; } = new();
-            public List<List<double>> Total_Volumes { get; set; } = new();
+            public List<List<double>>? Prices { get; set; }
+            public List<List<double>>? Total_Volumes { get; set; }
         }
     }
 }

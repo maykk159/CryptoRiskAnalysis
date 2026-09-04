@@ -37,10 +37,13 @@ namespace CryptoRiskAnalysis.API.Services
         private const double DOWNSIDE_TARGET_RETURN = 0d;
         public RiskScoreResult CalculateRisk(List<PriceData> priceHistory, decimal currentVolume, decimal averageVolume)
         {
-            if (priceHistory == null || priceHistory.Count == 0)
-            {
-                return new RiskScoreResult();
-            }
+            ArgumentNullException.ThrowIfNull(priceHistory);
+            ValidateInputs(priceHistory, currentVolume, averageVolume);
+
+            if (priceHistory.Count < MINIMUM_DATA_POINTS)
+                throw new ArgumentException(
+                    $"At least {MINIMUM_DATA_POINTS} daily price observations are required for risk analysis.",
+                    nameof(priceHistory));
 
             var prices = priceHistory.Select(p => p.Price).ToList();
             
@@ -80,6 +83,26 @@ namespace CryptoRiskAnalysis.API.Services
             };
         }
 
+        private static void ValidateInputs(
+            IReadOnlyList<PriceData> priceHistory,
+            decimal currentVolume,
+            decimal averageVolume)
+        {
+            if (currentVolume < 0)
+                throw new ArgumentOutOfRangeException(nameof(currentVolume), "Current volume cannot be negative.");
+            if (averageVolume < 0)
+                throw new ArgumentOutOfRangeException(nameof(averageVolume), "Average volume cannot be negative.");
+
+            for (var i = 0; i < priceHistory.Count; i++)
+            {
+                if (priceHistory[i].Price <= 0)
+                    throw new ArgumentException("Price history must contain only positive prices.", nameof(priceHistory));
+
+                if (i > 0 && priceHistory[i].Timestamp <= priceHistory[i - 1].Timestamp)
+                    throw new ArgumentException("Price history must be strictly chronological.", nameof(priceHistory));
+            }
+        }
+
         /// <summary>
         /// Calculate log returns from price series
         /// Log returns are more mathematically sound for financial calculations
@@ -89,8 +112,6 @@ namespace CryptoRiskAnalysis.API.Services
             var returns = new List<double>();
             for (int i = 1; i < prices.Count; i++)
             {
-                // Guard against division-by-zero and negative prices (would cause NaN in Math.Log)
-                if (prices[i - 1] <= 0 || prices[i] <= 0) continue;
                 // Log return: ln(P_t / P_t-1)
                 var logReturn = Math.Log((double)(prices[i] / prices[i - 1]));
                 returns.Add(logReturn);
@@ -219,7 +240,9 @@ namespace CryptoRiskAnalysis.API.Services
             else if (volumeRatio > 3.0m)
             {
                 // Unusual activity, potential manipulation or news
-                score = Math.Min(100, 55 + (volumeRatio - 3.0m) * 10);
+                // Continue from the normal-range score at 3.0x so crossing the
+                // threshold cannot make a larger volume anomaly look less risky.
+                score = Math.Min(100, 70 + (volumeRatio - 3.0m) * 10);
             }
             // 5. High volume + rising price = Healthy but watch
             else if (priceChange > 0.10m && volumeRatio > 1.5m)

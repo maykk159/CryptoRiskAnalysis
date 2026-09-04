@@ -3,7 +3,7 @@ import type { ApiResponse, RiskAnalysisResponse } from '../types/index';
 // Reads from .env.local in development — prevents hardcoded localhost in production
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5058/api';
 
-class ApiRequestError extends Error {
+export class ApiRequestError extends Error {
   readonly status?: number;
 
   constructor(

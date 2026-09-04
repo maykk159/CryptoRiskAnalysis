@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <title>Cipher Crypto Risk Intelligence</title>
+  <defs>
+    <linearGradient id="cipher-gradient" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#60a5fa" />
+      <stop offset="1" stop-color="#6366f1" />
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="#111827" />
+  <path
+    d="M45 17a20 20 0 1 0 0 30"
+    fill="none"
+    stroke="url(#cipher-gradient)"
+    stroke-linecap="round"
+    stroke-width="7"
+  />
+  <path
+    d="m19 39 9-10 7 6 11-12"
+    fill="none"
+    stroke="#e0e7ff"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="4"
+  />
+  <circle cx="46" cy="23" r="3" fill="#818cf8" />
+</svg>
