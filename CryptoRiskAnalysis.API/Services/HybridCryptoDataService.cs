@@ -1,6 +1,9 @@
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Models;
+using CryptoRiskAnalysis.API.Exceptions;
 using Microsoft.Extensions.Logging;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace CryptoRiskAnalysis.API.Services
 {
@@ -15,7 +18,7 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly ILogger<HybridCryptoDataService> _logger;
 
         public HybridCryptoDataService(
-            BinanceSpotService binanceService, 
+            BinanceSpotService binanceService,
             CoinGeckoService coinGeckoService,
             ILogger<HybridCryptoDataService> logger)
         {
@@ -46,7 +49,10 @@ namespace CryptoRiskAnalysis.API.Services
                 {
                     throw;
                 }
-                catch (Exception ex)
+                catch (Exception ex) when (ex is MarketDataProviderException
+                                               or UpstreamRateLimitException
+                                               or TimeoutRejectedException
+                                               or BrokenCircuitException)
                 {
                     _logger.LogWarning(ex, "Binance failed for {AssetId}, falling back to CoinGecko", assetId);
                 }
