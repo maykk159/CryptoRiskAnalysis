@@ -12,14 +12,20 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _cache;
         private readonly ILogger<BinanceSpotService> _logger;
+        private readonly MarketDataRequestLock _requestLock;
         private const string BaseUrl = "https://api.binance.com/api/v3";
         private const int CacheDurationSeconds = 60; // 1 minute cache for fresh data
 
-        public BinanceSpotService(HttpClient httpClient, IMemoryCache cache, ILogger<BinanceSpotService> logger)
+        public BinanceSpotService(
+            HttpClient httpClient,
+            IMemoryCache cache,
+            ILogger<BinanceSpotService> logger,
+            MarketDataRequestLock? requestLock = null)
         {
             _httpClient = httpClient;
             _cache = cache;
             _logger = logger;
+            _requestLock = requestLock ?? new MarketDataRequestLock();
         }
 
         /// <summary>
@@ -45,6 +51,13 @@ namespace CryptoRiskAnalysis.API.Services
             if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal) cachedData))
             {
                 _logger.LogDebug("Binance Cache HIT for {AssetId} ({Symbol})", assetId, symbol);
+                return cachedData;
+            }
+
+            using var requestLease = await _requestLock.AcquireAsync(cacheKey, cancellationToken);
+            if (_cache.TryGetValue(cacheKey, out cachedData))
+            {
+                _logger.LogDebug("Binance Cache HIT after waiting for {AssetId} ({Symbol})", assetId, symbol);
                 return cachedData;
             }
 

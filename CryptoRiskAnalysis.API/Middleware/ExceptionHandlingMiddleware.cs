@@ -62,11 +62,11 @@ namespace CryptoRiskAnalysis.API.Middleware
                 _ when _env.IsDevelopment() => exception.Message,
                 _ => "Internal Server Error"
             };
-            
+
             var response = new ApiResponse<string>(message)
             {
                 Succeeded = false,
-                Errors = _env.IsDevelopment() 
+                Errors = _env.IsDevelopment()
                     ? new List<string> { exception.Message, exception.StackTrace ?? string.Empty }
                     : new List<string> { "An error occurred while processing your request." }
             };

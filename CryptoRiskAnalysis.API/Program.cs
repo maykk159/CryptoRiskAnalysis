@@ -15,6 +15,7 @@ builder.Services.AddControllers();
 
 // Configure Services using Extension Method
 builder.Services.AddApplicationServices();
+builder.Services.AddForwardedHeadersConfiguration(builder.Configuration);
 
 // Configure CORS
 builder.Services.AddCorsConfiguration();
@@ -23,9 +24,22 @@ builder.Services.AddCorsConfiguration();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Direct production deployments must never serve API responses over plain HTTP.
+// The HTTPS endpoint/certificate can still be supplied by Kestrel configuration.
+builder.Services.AddHttpsRedirection(options =>
+{
+    options.HttpsPort = 443;
+    options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect;
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+// Resolve the original client IP and scheme before HTTPS redirects and rate limiting.
+// Only proxies/networks explicitly trusted in configuration (plus loopback defaults)
+// are allowed to supply these values.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -35,7 +49,11 @@ if (app.Environment.IsDevelopment())
 // Global Exception Handling Middleware
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// app.UseHttpsRedirection();
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("AllowReactApp");
 

@@ -59,7 +59,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = new CoinGeckoService(httpClient, cache, logger);
 
             var (priceHistory, currentVolume, avgVolume) =
-                await service.GetAllMarketDataAsync("bitcoin", 2);
+                await service.GetAllMarketDataAsync(
+                    "bitcoin", 2, TestContext.Current.CancellationToken);
 
             Assert.Equal(2, priceHistory.Count);
             Assert.Equal(105m, priceHistory[0].Price);
@@ -159,6 +160,58 @@ namespace CryptoRiskAnalysis.Tests.Services
             await Assert.ThrowsAsync<MarketDataProviderException>(() =>
                 service.GetAllMarketDataAsync("bitcoin", 1, TestContext.Current.CancellationToken));
             Assert.False(cache.TryGetValue("market_data_bitcoin_1", out _));
+        }
+
+        [Fact]
+        public async Task GetAllMarketDataAsync_ConcurrentCacheMissesShareOneProviderCall()
+        {
+            var timestamp = new DateTimeOffset(DateTimeOffset.UtcNow.Date.AddDays(-1), TimeSpan.Zero)
+                .ToUnixTimeMilliseconds();
+            var payload = JsonSerializer.Serialize(new
+            {
+                prices = new object[][] { new object[] { timestamp, 100m } },
+                total_volumes = new object[][] { new object[] { timestamp, 1000m } }
+            });
+            var providerCalls = 0;
+            var providerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseProvider = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var handler = new Mock<HttpMessageHandler>();
+            handler.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .Returns(async () =>
+                {
+                    Interlocked.Increment(ref providerCalls);
+                    providerStarted.SetResult();
+                    await releaseProvider.Task;
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(payload)
+                    };
+                });
+
+            using var httpClient = new HttpClient(handler.Object);
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var requestLock = new MarketDataRequestLock();
+            var logger = Mock.Of<ILogger<CoinGeckoService>>();
+            var firstService = new CoinGeckoService(httpClient, cache, logger, requestLock);
+            var secondService = new CoinGeckoService(httpClient, cache, logger, requestLock);
+
+            var firstRequest = firstService.GetAllMarketDataAsync(
+                "bitcoin", 1, TestContext.Current.CancellationToken);
+            await providerStarted.Task;
+            var secondRequest = secondService.GetAllMarketDataAsync(
+                "bitcoin", 1, TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, Volatile.Read(ref providerCalls));
+            releaseProvider.SetResult();
+            await Task.WhenAll(firstRequest, secondRequest);
+
+            Assert.Equal(1, providerCalls);
+            Assert.Equal(firstRequest.Result.currentVolume, secondRequest.Result.currentVolume);
         }
 
         private static HttpClient CreateHttpClient(string payload)

@@ -22,7 +22,7 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: shouldRetryQuery,
-      staleTime: 60_000,     // 1 minute — matches backend cache duration
+      staleTime: 60_000, // 1 minute — matches backend cache duration
       refetchOnWindowFocus: false, // don't re-fetch when switching tabs
     },
   },

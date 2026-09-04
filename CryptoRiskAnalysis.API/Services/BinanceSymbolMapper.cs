@@ -31,7 +31,7 @@ namespace CryptoRiskAnalysis.API.Services
             { "uniswap", "UNIUSDT" },
             { "aptos", "APTUSDT" }
         };
-        
+
         /// <summary>
         /// Checks if an asset is available on Binance with good liquidity
         /// </summary>
@@ -39,7 +39,7 @@ namespace CryptoRiskAnalysis.API.Services
         {
             return SymbolMap.TryGetValue(coinGeckoId, out var symbol) && symbol != null;
         }
-        
+
         /// <summary>
         /// Gets the Binance symbol for a CoinGecko asset ID
         /// </summary>

@@ -1,28 +1,28 @@
 export interface PriceData {
-    timestamp: number;
-    price: number;
+  timestamp: number;
+  price: number;
 }
 
 export interface RiskAnalysisResponse {
-    assetId: string;
-    compositeRiskScore: number;
-    volatilityScore: number;
-    trendScore: number;
-    volumeScore: number;
+  assetId: string;
+  compositeRiskScore: number;
+  volatilityScore: number;
+  trendScore: number;
+  volumeScore: number;
 
-    // Advanced financial metrics
-    downsideRisk: number;
-    maxDrawdown: number;
-    sharpeRatio: number;
-    valueAtRisk95: number;
-    annualizedVolatility: number;
+  // Advanced financial metrics
+  downsideRisk: number;
+  maxDrawdown: number;
+  sharpeRatio: number;
+  valueAtRisk95: number;
+  annualizedVolatility: number;
 
-    priceHistory: PriceData[];
+  priceHistory: PriceData[];
 }
 
 export interface ApiResponse<T> {
-    succeeded: boolean;
-    message?: string;
-    data?: T;
-    errors?: string[];
+  succeeded: boolean;
+  message?: string;
+  data?: T;
+  errors?: string[];
 }

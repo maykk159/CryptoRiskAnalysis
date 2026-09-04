@@ -1,24 +1,87 @@
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Services;
+using CryptoRiskAnalysis.API.Wrappers;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Http.Resilience;
+using System.Net;
 using System.Threading.RateLimiting;
 
 namespace CryptoRiskAnalysis.API.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+        public static IServiceCollection AddForwardedHeadersConfiguration(
+            this IServiceCollection services,
+            IConfiguration configuration)
         {
+            var reverseProxySection = configuration.GetSection("ReverseProxy");
+
+            services.Configure<ForwardedHeadersOptions>(options =>
+            {
+                options.ForwardedHeaders =
+                    ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+
+                var forwardLimit = reverseProxySection.GetValue<int?>("ForwardLimit") ?? 1;
+                if (forwardLimit < 1)
+                {
+                    throw new InvalidOperationException(
+                        "ReverseProxy:ForwardLimit must be greater than zero.");
+                }
+
+                options.ForwardLimit = forwardLimit;
+
+                foreach (var proxy in reverseProxySection
+                    .GetSection("KnownProxies")
+                    .Get<string[]>() ?? [])
+                {
+                    if (!IPAddress.TryParse(proxy, out var address))
+                    {
+                        throw new InvalidOperationException(
+                            $"ReverseProxy:KnownProxies contains an invalid IP address: '{proxy}'.");
+                    }
+
+                    options.KnownProxies.Add(address);
+                }
+
+                foreach (var network in reverseProxySection
+                    .GetSection("KnownNetworks")
+                    .Get<string[]>() ?? [])
+                {
+                    if (!System.Net.IPNetwork.TryParse(network, out var addressRange))
+                    {
+                        throw new InvalidOperationException(
+                            $"ReverseProxy:KnownNetworks contains an invalid CIDR range: '{network}'.");
+                    }
+
+                    options.KnownIPNetworks.Add(addressRange);
+                }
+            });
+
+            return services;
+        }
+
+        public static IServiceCollection AddApplicationServices(
+            this IServiceCollection services,
+            Action<HttpStandardResilienceOptions>? configureResilience = null)
+        {
+            void ConfigureResilience(HttpStandardResilienceOptions options)
+            {
+                ConfigureMarketDataResilience(options);
+                configureResilience?.Invoke(options);
+            }
+
             // Add Memory Cache
             services.AddMemoryCache();
+            services.AddSingleton<MarketDataRequestLock>();
 
             // Retry transient failures and 429 responses up to three times with
             // exponential backoff, with per-attempt and total request timeouts.
             services.AddHttpClient<BinanceSpotService>()
-                .AddStandardResilienceHandler(ConfigureMarketDataResilience);
+                .AddStandardResilienceHandler(ConfigureResilience);
 
             services.AddHttpClient<CoinGeckoService>()
-                .AddStandardResilienceHandler(ConfigureMarketDataResilience);
+                .AddStandardResilienceHandler(ConfigureResilience);
 
             // Register HybridCryptoDataService as the single implementation of ICryptoDataService
             services.AddScoped<ICryptoDataService, HybridCryptoDataService>();
@@ -29,9 +92,16 @@ namespace CryptoRiskAnalysis.API.Extensions
             services.AddRateLimiter(options =>
             {
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.OnRejected = async (context, cancellationToken) =>
+                {
+                    context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                    context.HttpContext.Response.ContentType = "application/json";
+                    var response = new ApiResponse<string>("Too many requests. Please try again later.");
+                    await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+                };
                 options.AddPolicy("RiskAnalysis", context =>
                     RateLimitPartition.GetFixedWindowLimiter(
-                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        partitionKey: GetClientIpAddress(context),
                         factory: _ => new FixedWindowRateLimiterOptions
                         {
                             PermitLimit = 30,
@@ -42,6 +112,19 @@ namespace CryptoRiskAnalysis.API.Extensions
             });
 
             return services;
+        }
+
+        private static string GetClientIpAddress(HttpContext context)
+        {
+            var address = context.Connection.RemoteIpAddress;
+            if (address is null)
+            {
+                return "unknown";
+            }
+
+            return address.IsIPv4MappedToIPv6
+                ? address.MapToIPv4().ToString()
+                : address.ToString();
         }
 
         public static IServiceCollection AddCorsConfiguration(this IServiceCollection services)
