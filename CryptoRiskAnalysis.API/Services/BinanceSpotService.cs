@@ -32,6 +32,9 @@ namespace CryptoRiskAnalysis.API.Services
             int days,
             CancellationToken cancellationToken = default)
         {
+            if (days <= 0)
+                throw new ArgumentOutOfRangeException(nameof(days), "The requested day count must be positive.");
+
             // 1. Map CoinGecko ID to Binance symbol
             var symbol = BinanceSymbolMapper.GetBinanceSymbol(assetId);
             if (symbol == null)
@@ -84,6 +87,9 @@ namespace CryptoRiskAnalysis.API.Services
                 if (klines == null || klines.Count == 0)
                     throw new MarketDataProviderException("Binance", $"no kline data was returned for {symbol}.");
 
+                if (klines.Any(k => k.Count < 7))
+                    throw new MarketDataProviderException("Binance", "a kline did not contain all required fields.");
+
                 // Binance kline index 6 is the candle close time. Exclude the currently open
                 // daily candle so a partial day cannot distort volatility and trend metrics.
                 var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -124,6 +130,12 @@ namespace CryptoRiskAnalysis.API.Services
                 {
                     throw new MarketDataProviderException("Binance", "a kline contained an invalid price, volume, or timestamp.", ex);
                 }
+
+                var volumeHistory = completedKlines
+                    .Select((k, index) => (priceHistory[index].Timestamp, Volume: volumes[index]))
+                    .ToList();
+
+                MarketDataValidator.ValidateCompletedDailySeries("Binance", priceHistory, volumeHistory, days);
 
                 decimal currentVolume;
                 decimal avgVolume;
@@ -169,29 +181,5 @@ namespace CryptoRiskAnalysis.API.Services
                 : long.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture);
         }
 
-        // Legacy methods (not used in optimized flow, but required by interface)
-        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(
-            string assetId,
-            int days,
-            CancellationToken cancellationToken = default)
-        {
-            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
-            return priceHistory;
-        }
-
-        public async Task<decimal> GetCurrentVolumeAsync(string assetId, CancellationToken cancellationToken = default)
-        {
-            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1, cancellationToken);
-            return currentVolume;
-        }
-
-        public async Task<decimal> GetAverageVolumeAsync(
-            string assetId,
-            int days,
-            CancellationToken cancellationToken = default)
-        {
-            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
-            return avgVolume;
-        }
     }
 }

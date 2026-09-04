@@ -51,6 +51,29 @@ interface RiskScoreCardProps {
   currentPrice?: number;
 }
 
+type Asset = NonNullable<RiskScoreCardProps['asset']>;
+
+const AssetIcon: React.FC<{ asset: Asset }> = ({ asset }) => {
+  const [failedIconUrl, setFailedIconUrl] = React.useState<string | null>(null);
+
+  if (failedIconUrl === asset.icon) {
+    return (
+      <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-lg font-bold text-gray-300 border-2 border-gray-600">
+        {asset.ticker.substring(0, 2)}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={asset.icon}
+      alt={`${asset.name} icon`}
+      className="w-12 h-12 rounded-full object-contain bg-white p-1"
+      onError={() => setFailedIconUrl(asset.icon)}
+    />
+  );
+};
+
 // ─── ScoreBar ────────────────────────────────────────────────────────────────
 
 const colorClasses = {
@@ -133,18 +156,7 @@ export const RiskScoreCard: React.FC<RiskScoreCardProps> = ({ data, asset, curre
       <div className="flex items-center gap-4 mb-6">
         {asset && (
           <div className="relative w-12 h-12 shrink-0">
-            <img
-              src={asset.icon}
-              alt={asset.name}
-              className="w-12 h-12 rounded-full object-contain bg-white p-1"
-              onError={e => {
-                (e.target as HTMLImageElement).style.display = 'none';
-                (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-              }}
-            />
-            <div className="w-12 h-12 rounded-full bg-gray-700 flex items-center justify-center text-lg font-bold text-gray-300 hidden absolute inset-0 border-2 border-gray-600">
-              {asset.ticker.substring(0, 2)}
-            </div>
+            <AssetIcon asset={asset} />
           </div>
         )}
         <h2 className="text-xl font-bold text-white flex items-center gap-2 flex-wrap">

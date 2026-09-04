@@ -81,6 +81,37 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.Equal(0m, result.DownsideRisk); // Insufficient data
         }
 
+        [Theory]
+        [InlineData(0)]
+        [InlineData(-1)]
+        public void CalculateRisk_WithNonPositivePrice_RejectsEntireSeries(int invalidPrice)
+        {
+            var priceHistory = new List<PriceData>
+            {
+                new() { Timestamp = 1000, Price = 100m },
+                new() { Timestamp = 2000, Price = invalidPrice },
+                new() { Timestamp = 3000, Price = 110m }
+            };
+
+            Assert.Throws<ArgumentException>(() =>
+                _engine.CalculateRisk(priceHistory, 1000m, 1000m));
+        }
+
+        [Theory]
+        [InlineData(-1, 1000)]
+        [InlineData(1000, -1)]
+        public void CalculateRisk_WithNegativeVolume_RejectsInput(int currentVolume, int averageVolume)
+        {
+            var priceHistory = new List<PriceData>
+            {
+                new() { Timestamp = 1000, Price = 100m },
+                new() { Timestamp = 2000, Price = 101m }
+            };
+
+            Assert.Throws<ArgumentOutOfRangeException>(() =>
+                _engine.CalculateRisk(priceHistory, currentVolume, averageVolume));
+        }
+
         [Fact]
         public void CalculateDownsideRisk_UsesZeroTargetAndAllReturnPeriods()
         {
@@ -195,6 +226,28 @@ namespace CryptoRiskAnalysis.Tests.Services
 
             // Assert - High volume relative to average = low liquidity risk
             Assert.InRange(result.VolumeScore, 0, 40);
+        }
+
+        [Fact]
+        public void CalculateRisk_CrossingVolumeSpikeThreshold_DoesNotDecreaseVolumeRisk()
+        {
+            // Arrange - Keep price flat so only the volume ratio affects the score.
+            var priceHistory = Enumerable.Range(0, 30)
+                .Select(i => new PriceData
+                {
+                    Timestamp = DateTimeOffset.UtcNow.AddDays(-30 + i).ToUnixTimeMilliseconds(),
+                    Price = 100m
+                })
+                .ToList();
+
+            // Act - Compare the exact 3.0x threshold with a value just above it.
+            var atThreshold = _engine.CalculateRisk(priceHistory, 3000m, 1000m);
+            var aboveThreshold = _engine.CalculateRisk(priceHistory, 3010m, 1000m);
+
+            // Assert - The score remains continuous and increases with the anomaly.
+            Assert.Equal(70m, atThreshold.VolumeScore);
+            Assert.Equal(70.1m, aboveThreshold.VolumeScore);
+            Assert.True(aboveThreshold.VolumeScore > atThreshold.VolumeScore);
         }
 
         [Fact]

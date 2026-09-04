@@ -9,10 +9,5 @@ namespace CryptoRiskAnalysis.API.Interfaces
             string assetId,
             int days,
             CancellationToken cancellationToken = default);
-        
-        // Legacy methods (kept for backward compatibility)
-        Task<List<PriceData>> GetHistoricalPriceDataAsync(string assetId, int days, CancellationToken cancellationToken = default);
-        Task<decimal> GetCurrentVolumeAsync(string assetId, CancellationToken cancellationToken = default);
-        Task<decimal> GetAverageVolumeAsync(string assetId, int days, CancellationToken cancellationToken = default);
     }
 }

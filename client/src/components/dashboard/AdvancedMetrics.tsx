@@ -11,6 +11,11 @@ interface AdvancedMetricsProps {
     };
 }
 
+const formatLossPercentage = (value: number) => {
+    const magnitude = Math.abs(value).toFixed(2);
+    return magnitude === '0.00' ? '0.00%' : `-${magnitude}%`;
+};
+
 export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
     return (
         <div className="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700">
@@ -44,7 +49,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                     </div>
                     <div>
                         <p className="text-gray-400 text-sm font-medium mb-1">Max Drawdown</p>
-                        <p className="text-red-400 text-2xl font-bold">-{data.maxDrawdown.toFixed(2)}%</p>
+                        <p className="text-red-400 text-2xl font-bold">{formatLossPercentage(data.maxDrawdown)}</p>
                         <p className="text-gray-500 text-xs mt-1">Worst-case decline</p>
                     </div>
                 </div>
@@ -73,7 +78,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                     </div>
                     <div>
                         <p className="text-gray-400 text-sm font-medium mb-1">VaR (95%)</p>
-                        <p className="text-orange-400 text-2xl font-bold">-{data.valueAtRisk95.toFixed(2)}%</p>
+                        <p className="text-orange-400 text-2xl font-bold">{formatLossPercentage(data.valueAtRisk95)}</p>
                         <p className="text-gray-500 text-xs mt-1">95% confidence loss</p>
                     </div>
                 </div>

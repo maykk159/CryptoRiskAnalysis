@@ -93,12 +93,10 @@ CryptoRiskAnalysis.API/
 │   └── IRiskEngine.cs               # Risk engine abstraction
 │
 ├── Models/
-│   ├── CryptoAsset.cs               # Asset model
 │   ├── PriceData.cs                 # Price data model
 │   └── RiskScoreResult.cs           # Risk result model
 │
 ├── DTOs/
-│   ├── AssetRequestDto.cs           # Request DTO
 │   └── RiskAnalysisResponseDto.cs   # Response DTO
 │
 ├── Wrappers/

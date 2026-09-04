@@ -9,7 +9,8 @@ interface AssetSelectorProps {
 }
 
 const CoinIcon: React.FC<{ iconUrl: string; name: string; ticker: string }> = ({ iconUrl, name, ticker }) => {
-    const [hasError, setHasError] = useState(false);
+    const [failedIconUrl, setFailedIconUrl] = useState<string | null>(null);
+    const hasError = failedIconUrl === iconUrl;
 
     if (hasError) {
         return (
@@ -24,7 +25,7 @@ const CoinIcon: React.FC<{ iconUrl: string; name: string; ticker: string }> = ({
             src={iconUrl} 
             alt={`${name} icon`} 
             className="w-6 h-6 object-contain shrink-0" 
-            onError={() => setHasError(true)} 
+            onError={() => setFailedIconUrl(iconUrl)}
         />
     );
 };

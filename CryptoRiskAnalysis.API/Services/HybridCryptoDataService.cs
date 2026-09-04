@@ -66,29 +66,5 @@ namespace CryptoRiskAnalysis.API.Services
             return await _coinGeckoService.GetAllMarketDataAsync(assetId, days, cancellationToken);
         }
 
-        // Legacy interface methods - delegate to GetAllMarketDataAsync
-        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(
-            string assetId,
-            int days,
-            CancellationToken cancellationToken = default)
-        {
-            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
-            return priceHistory;
-        }
-
-        public async Task<decimal> GetCurrentVolumeAsync(string assetId, CancellationToken cancellationToken = default)
-        {
-            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1, cancellationToken);
-            return currentVolume;
-        }
-
-        public async Task<decimal> GetAverageVolumeAsync(
-            string assetId,
-            int days,
-            CancellationToken cancellationToken = default)
-        {
-            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
-            return avgVolume;
-        }
     }
 }

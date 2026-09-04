@@ -25,7 +25,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             using var coinGeckoCache = new MemoryCache(new MemoryCacheOptions());
             var service = CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache);
 
-            var result = await service.GetAllMarketDataAsync("bitcoin", 30);
+            var result = await service.GetAllMarketDataAsync("bitcoin", 1);
 
             Assert.Equal(1, coinGeckoCalls);
             Assert.Single(result.priceHistory);
@@ -47,7 +47,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             using var coinGeckoCache = new MemoryCache(new MemoryCacheOptions());
             var service = CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache);
 
-            var result = await service.GetAllMarketDataAsync("bitcoin", 30);
+            var result = await service.GetAllMarketDataAsync("bitcoin", 1);
 
             Assert.Equal(1, coinGeckoCalls);
             Assert.Single(result.priceHistory);

@@ -14,7 +14,7 @@ Proje temel olarak iki ana bileşenden (Backend ve Frontend) oluşan tam yığı
     *   `CoinGeckoService.cs`: Binance verisine ulaşılamadığında veya bazı spesifik varlıklar için yedek veri kaynağı olarak görev yapan servistir.
     *   `BinanceSymbolMapper.cs`: CoinGecko formatındaki kripto isimlerini (örneğin 'ethereum') Binance formatındaki işlem çifti sembollerine ('ETHUSDT') çeviren mantık sınıfıdır.
     *   `RiskAnalysisEngine.cs`: Projenin beyni konumundadır. Servislerden gelen veriyi istatistiksel modellerden geçirerek bir "Risk Skoru" üreten hesaplama motorudur.
-*   **Models / DTOs**: Sistem içerisindeki katmanlar arası veri taşıma şablonlarıdır (`CryptoAsset.cs`, `PriceData.cs`, `RiskScoreResult.cs`).
+*   **Models / DTOs**: Sistem içerisindeki katmanlar arası veri taşıma şablonlarıdır (`PriceData.cs`, `RiskScoreResult.cs`, `RiskAnalysisResponseDto.cs`).
 *   **Interfaces**: Bağımlılıkların tersine çevrilmesi prensibi (Dependency Injection) için kullanılan `ICryptoDataService` ve `IRiskEngine` şablonlarıdır. Sistemin parçalarının kolayca değiştirilip test edilebilmesini sağlar.
 
 ### Frontend (React 19, TypeScript, Vite - `client/` klasörü)
