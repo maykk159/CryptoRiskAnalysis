@@ -39,6 +39,8 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors("AllowReactApp");
 
+app.UseRateLimiter();
+
 app.UseAuthorization();
 
 app.MapControllers();

@@ -1,29 +1,52 @@
-import axios, { AxiosError } from 'axios';
 import type { ApiResponse, RiskAnalysisResponse } from '../types/index';
 
 // Reads from .env.local in development — prevents hardcoded localhost in production
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5058/api';
 
-export const api = axios.create({
-  baseURL: API_URL,
-  headers: {
-    'Content-Type': 'application/json',
-  },
-});
+class ApiRequestError extends Error {
+  readonly status?: number;
+
+  constructor(
+    message: string,
+    status?: number
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+  }
+}
 
 export const getRiskAnalysis = async (
   assetId: string,
-  days: number = 30
+  days: number = 30,
+  signal?: AbortSignal
 ): Promise<RiskAnalysisResponse> => {
-  const response = await api.get<ApiResponse<RiskAnalysisResponse>>(
-    `/RiskAnalysis/${assetId}?days=${days}`
+  const query = new URLSearchParams({ days: String(days) });
+  const response = await fetch(
+    `${API_URL}/RiskAnalysis/${encodeURIComponent(assetId)}?${query}`,
+    {
+      headers: { Accept: 'application/json' },
+      signal,
+    }
   );
 
-  if (!response.data.succeeded || !response.data.data) {
-    throw new Error(response.data.message ?? 'Failed to fetch risk analysis data');
+  let payload: ApiResponse<RiskAnalysisResponse> | undefined;
+  try {
+    payload = await response.json() as ApiResponse<RiskAnalysisResponse>;
+  } catch {
+    if (!response.ok) {
+      throw new ApiRequestError(`Request failed with status ${response.status}`, response.status);
+    }
   }
 
-  return response.data.data;
+  if (!response.ok || !payload?.succeeded || !payload.data) {
+    throw new ApiRequestError(
+      payload?.message ?? 'Failed to fetch risk analysis data',
+      response.status
+    );
+  }
+
+  return payload.data;
 };
 
 /**
@@ -32,8 +55,8 @@ export const getRiskAnalysis = async (
  * so TypeScript can actually check our error handling logic.
  */
 export function getErrorMessage(err: unknown, assetName?: string): string {
-  if (err instanceof AxiosError) {
-    const status = err.response?.status;
+  if (err instanceof ApiRequestError) {
+    const { status } = err;
 
     if (status === 429)
       return 'API rate limit exceeded. Please wait a few seconds and try again.';
@@ -41,12 +64,14 @@ export function getErrorMessage(err: unknown, assetName?: string): string {
     if (status === 404)
       return `Crypto asset "${assetName ?? 'unknown'}" not found. Please select a different asset.`;
 
-    if (err.message && err.message !== 'Network Error') return err.message;
-
-    return 'Failed to fetch data from the server.';
+    return err.message;
   }
 
-  if (err instanceof Error && err.message && err.message !== 'Network Error') {
+  if (err instanceof DOMException && err.name === 'AbortError') {
+    return 'Request was cancelled.';
+  }
+
+  if (err instanceof Error && err.message) {
     return err.message;
   }
 

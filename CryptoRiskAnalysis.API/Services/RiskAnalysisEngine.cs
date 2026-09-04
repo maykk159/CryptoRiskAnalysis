@@ -34,6 +34,7 @@ namespace CryptoRiskAnalysis.API.Services
         private const int CRYPTO_TRADING_DAYS_PER_YEAR = 365;  // Crypto trades 24/7
         private const int SHORT_TERM_DAYS = 7;
         private const int MINIMUM_DATA_POINTS = 7;
+        private const double DOWNSIDE_TARGET_RETURN = 0d;
         public RiskScoreResult CalculateRisk(List<PriceData> priceHistory, decimal currentVolume, decimal averageVolume)
         {
             if (priceHistory == null || priceHistory.Count == 0)
@@ -300,20 +301,22 @@ namespace CryptoRiskAnalysis.API.Services
         }
 
         /// <summary>
-        /// Calculate downside risk - volatility of negative returns only
-        /// Focuses on downside movements, ignoring positive returns
+        /// Calculate downside deviation against a 0% daily target return.
+        /// Returns at or above the target contribute zero; all periods remain in the denominator.
         /// </summary>
         private decimal CalculateDownsideRisk(List<double> returns)
         {
-            if (returns.Count < 2) return 0m;
+            if (returns.Count == 0) return 0m;
 
-            var downsideReturns = returns.Where(r => r < 0).ToList();
-            if (downsideReturns.Count < 2) return 0m;
+            var sumOfSquaredShortfalls = returns.Sum(returnValue =>
+            {
+                var shortfall = Math.Min(0d, returnValue - DOWNSIDE_TARGET_RETURN);
+                return shortfall * shortfall;
+            });
+            var downsideDeviation = Math.Sqrt(sumOfSquaredShortfalls / returns.Count);
 
-            var downsideStdDev = CalculateStdDev(downsideReturns);
-
-            // Annualize and convert to percentage (standard financial metric)
-            var annualizedDownside = downsideStdDev * Math.Sqrt(CRYPTO_TRADING_DAYS_PER_YEAR) * 100;
+            // Daily data is annualized with 365 periods because crypto trades every day.
+            var annualizedDownside = downsideDeviation * Math.Sqrt(CRYPTO_TRADING_DAYS_PER_YEAR) * 100;
             return (decimal)annualizedDownside;
         }
 
