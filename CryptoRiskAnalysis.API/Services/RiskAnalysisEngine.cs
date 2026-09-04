@@ -207,10 +207,11 @@ namespace CryptoRiskAnalysis.API.Services
 
             // Calculate recent price change for context
             decimal priceChange = 0;
-            if (prices.Count >= 7)
+            // Seven daily return intervals require eight price observations.
+            if (prices.Count > SHORT_TERM_DAYS)
             {
                 var recent = prices.Last();
-                var weekAgo = prices[prices.Count - 7];
+                var weekAgo = prices[^(SHORT_TERM_DAYS + 1)];
                 priceChange = weekAgo == 0 ? 0 : (recent - weekAgo) / weekAgo;
             }
 
@@ -400,20 +401,10 @@ namespace CryptoRiskAnalysis.API.Services
 
             var sortedReturns = returns.OrderBy(r => r).ToList();
 
-            // For small datasets (< 20 points), use worst return instead of percentile
-            // For larger datasets, use 5th percentile (95% confidence - worst 5%)
-            double var95;
-            if (sortedReturns.Count < 20)
-            {
-                // Use worst return (most conservative estimate)
-                var95 = sortedReturns.First();
-            }
-            else
-            {
-                // Standard 5th percentile calculation
-                var index = (int)(sortedReturns.Count * 0.05);
-                var95 = sortedReturns[index];
-            }
+            // Nearest-rank uses a one-based rank. Subtracting one only after the
+            // ceiling avoids selecting the second-worst return at exactly 20 points.
+            var percentileRank = (int)Math.Ceiling(sortedReturns.Count * 0.05);
+            var var95 = sortedReturns[percentileRank - 1];
 
             // Convert to percentage (make positive for clarity)
             // If the 5th percentile is positive (bull market), VaR is 0 (no loss risk in 95% of cases)

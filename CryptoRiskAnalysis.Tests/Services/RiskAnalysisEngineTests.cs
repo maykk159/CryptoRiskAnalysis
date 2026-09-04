@@ -163,6 +163,22 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
+        public void CalculateVaR_AddingTwentiethPositiveReturn_DoesNotDropWorstLoss()
+        {
+            var nineteenReturns = new List<double> { -0.20, -0.02 };
+            nineteenReturns.AddRange(Enumerable.Repeat(0.01, 17));
+            var twentyReturns = new List<double>(nineteenReturns) { 0.01 };
+
+            var nineteenPointResult = _engine.CalculateRisk(
+                CreatePriceHistory(nineteenReturns), 1000m, 1000m);
+            var twentyPointResult = _engine.CalculateRisk(
+                CreatePriceHistory(twentyReturns), 1000m, 1000m);
+
+            Assert.Equal(20m, nineteenPointResult.ValueAtRisk95);
+            Assert.Equal(nineteenPointResult.ValueAtRisk95, twentyPointResult.ValueAtRisk95);
+        }
+
+        [Fact]
         public void CalculateSharpeRatio_WithPositiveReturns_ReturnsPositiveValue()
         {
             // Arrange - Increasing prices
@@ -249,6 +265,42 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
+        public void CalculateVolumeScore_UsesSevenIntervalsForWeeklyPriceChange()
+        {
+            var prices = new[] { 100m, 110m, 110m, 110m, 110m, 110m, 110m, 106m };
+            var priceHistory = prices
+                .Select((price, index) => new PriceData
+                {
+                    Timestamp = 1000L + index * 1000L,
+                    Price = price
+                })
+                .ToList();
+
+            var result = _engine.CalculateRisk(priceHistory, 400m, 1000m);
+
+            // 106 versus 100 is a 6% seven-day rise, so low volume signals a weak rally.
+            Assert.Equal(66m, result.VolumeScore);
+        }
+
+        [Fact]
+        public void CalculateVolumeScore_WithSevenPrices_DoesNotUseSixDayChange()
+        {
+            var prices = new[] { 100m, 106m, 106m, 106m, 106m, 106m, 106m };
+            var priceHistory = prices
+                .Select((price, index) => new PriceData
+                {
+                    Timestamp = 1000L + index * 1000L,
+                    Price = price
+                })
+                .ToList();
+
+            var result = _engine.CalculateRisk(priceHistory, 400m, 1000m);
+
+            // There are only six return intervals, so no weekly price context is applied.
+            Assert.Equal(42m, result.VolumeScore);
+        }
+
+        [Fact]
         public void CalculateRisk_WithLowVolume_ReturnsHighVolumeScore()
         {
             // Arrange
@@ -293,6 +345,27 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.InRange(result.TrendScore, 0, 100);
             Assert.InRange(result.VolumeScore, 0, 100);
             Assert.InRange(result.CompositeRiskScore, 0, 100);
+        }
+
+        private static List<PriceData> CreatePriceHistory(IEnumerable<double> logReturns)
+        {
+            var priceHistory = new List<PriceData>();
+            var price = 100d;
+            long timestamp = 1000;
+            priceHistory.Add(new PriceData { Timestamp = timestamp, Price = (decimal)price });
+
+            foreach (var logReturn in logReturns)
+            {
+                price *= Math.Exp(logReturn);
+                timestamp += 1000;
+                priceHistory.Add(new PriceData
+                {
+                    Timestamp = timestamp,
+                    Price = (decimal)price
+                });
+            }
+
+            return priceHistory;
         }
     }
 }

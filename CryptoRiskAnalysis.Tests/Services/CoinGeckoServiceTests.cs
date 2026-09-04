@@ -70,6 +70,50 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
+        public async Task GetAllMarketDataAsync_ExcludesFutureMidnightPoint()
+        {
+            var today = DateTimeOffset.UtcNow.Date;
+            var firstCompletedTimestamp = new DateTimeOffset(today.AddDays(-2), TimeSpan.Zero)
+                .ToUnixTimeMilliseconds();
+            var lastCompletedTimestamp = new DateTimeOffset(today.AddDays(-1), TimeSpan.Zero)
+                .ToUnixTimeMilliseconds();
+            var futureMidnightTimestamp = new DateTimeOffset(today.AddDays(1), TimeSpan.Zero)
+                .ToUnixTimeMilliseconds();
+            var payload = JsonSerializer.Serialize(new
+            {
+                prices = new object[][]
+                {
+                    new object[] { firstCompletedTimestamp, 100m },
+                    new object[] { lastCompletedTimestamp, 110m },
+                    new object[] { futureMidnightTimestamp, 999m }
+                },
+                total_volumes = new object[][]
+                {
+                    new object[] { firstCompletedTimestamp, 1000m },
+                    new object[] { lastCompletedTimestamp, 1100m },
+                    new object[] { futureMidnightTimestamp, 9999m }
+                }
+            });
+
+            using var httpClient = CreateHttpClient(payload);
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var service = new CoinGeckoService(
+                httpClient,
+                cache,
+                Mock.Of<ILogger<CoinGeckoService>>());
+
+            var (priceHistory, currentVolume, avgVolume) =
+                await service.GetAllMarketDataAsync(
+                    "bitcoin", 2, TestContext.Current.CancellationToken);
+
+            Assert.Equal(2, priceHistory.Count);
+            Assert.Equal(lastCompletedTimestamp, priceHistory[^1].Timestamp);
+            Assert.Equal(110m, priceHistory[^1].Price);
+            Assert.Equal(1100m, currentVolume);
+            Assert.Equal(1050m, avgVolume);
+        }
+
+        [Fact]
         public async Task GetAllMarketDataAsync_RejectsMismatchedPriceAndVolumeDates()
         {
             var today = DateTimeOffset.UtcNow.Date;

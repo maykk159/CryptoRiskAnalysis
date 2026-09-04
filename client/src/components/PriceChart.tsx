@@ -11,6 +11,7 @@ import {
 import { TrendingUp } from 'lucide-react';
 import type { PriceData } from '../types';
 import { formatUsdPrice } from '../utils/formatUsdPrice';
+import { formatUtcAxisDate, formatUtcTooltipDate } from '../utils/formatUtcDate';
 
 interface PriceChartProps {
   data: PriceData[];
@@ -24,8 +25,8 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
         const dateObj = new Date(d.timestamp);
         return {
           ...d,
-          date: dateObj.toLocaleDateString('en-US'), // Keep full date for tooltip or reference
-          day: dateObj.getDate(), // robust day extraction
+          date: dateObj.toLocaleDateString('en-US', { timeZone: 'UTC' }),
+          day: dateObj.getUTCDate(),
           fullDate: dateObj, // keep object if needed
         };
       }),
@@ -61,10 +62,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
               tick={{ fill: '#9CA3AF', fontSize: 12 }}
               tickLine={false}
               axisLine={false}
-              tickFormatter={timestamp => {
-                const date = new Date(timestamp);
-                return `${date.getDate()}/${date.getMonth() + 1}`; // Display DD/M
-              }}
+              tickFormatter={formatUtcAxisDate}
               minTickGap={50}
             />
             <YAxis
@@ -86,14 +84,7 @@ export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
               }}
               itemStyle={{ color: '#818cf8', fontWeight: 'bold' }}
               formatter={(value: number) => [formatUsdPrice(value), 'Price']}
-              labelFormatter={label =>
-                new Date(label).toLocaleDateString('en-US', {
-                  weekday: 'short',
-                  year: 'numeric',
-                  month: 'short',
-                  day: 'numeric',
-                })
-              }
+              labelFormatter={formatUtcTooltipDate}
             />
             <Area
               type="monotone"
