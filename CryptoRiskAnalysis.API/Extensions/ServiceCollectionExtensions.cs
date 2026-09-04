@@ -2,6 +2,7 @@ using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Services;
 using Polly;
 using Polly.Extensions.Http;
+using System.Threading.RateLimiting;
 
 namespace CryptoRiskAnalysis.API.Extensions
 {
@@ -14,17 +15,38 @@ namespace CryptoRiskAnalysis.API.Extensions
 
             // Register API Services with HttpClient + Polly retry policy
             // Retries up to 3 times on transient errors (5xx, network) and 429 with exponential backoff
-            services.AddHttpClient<BinanceSpotService>()
-                .AddPolicyHandler(GetRetryPolicy());
+            services.AddHttpClient<BinanceSpotService>(client =>
+                client.Timeout = TimeSpan.FromSeconds(30))
+                .AddPolicyHandler(GetRetryPolicy())
+                .AddPolicyHandler(GetCircuitBreakerPolicy())
+                .AddPolicyHandler(GetTimeoutPolicy());
 
-            services.AddHttpClient<CoinGeckoService>()
-                .AddPolicyHandler(GetRetryPolicy());
+            services.AddHttpClient<CoinGeckoService>(client =>
+                client.Timeout = TimeSpan.FromSeconds(30))
+                .AddPolicyHandler(GetRetryPolicy())
+                .AddPolicyHandler(GetCircuitBreakerPolicy())
+                .AddPolicyHandler(GetTimeoutPolicy());
 
             // Register HybridCryptoDataService as the single implementation of ICryptoDataService
             services.AddScoped<ICryptoDataService, HybridCryptoDataService>();
 
             // Register Risk Engine
             services.AddScoped<IRiskEngine, RiskAnalysisEngine>();
+
+            services.AddRateLimiter(options =>
+            {
+                options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.AddPolicy("RiskAnalysis", context =>
+                    RateLimitPartition.GetFixedWindowLimiter(
+                        partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                        factory: _ => new FixedWindowRateLimiterOptions
+                        {
+                            PermitLimit = 30,
+                            Window = TimeSpan.FromMinutes(1),
+                            QueueLimit = 0,
+                            AutoReplenishment = true
+                        }));
+            });
 
             return services;
         }
@@ -56,6 +78,21 @@ namespace CryptoRiskAnalysis.API.Extensions
                     retryCount: 3,
                     sleepDurationProvider: retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))
                 );
+        }
+
+        private static IAsyncPolicy<HttpResponseMessage> GetCircuitBreakerPolicy()
+        {
+            return HttpPolicyExtensions
+                .HandleTransientHttpError()
+                .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                .CircuitBreakerAsync(
+                    handledEventsAllowedBeforeBreaking: 5,
+                    durationOfBreak: TimeSpan.FromSeconds(30));
+        }
+
+        private static IAsyncPolicy<HttpResponseMessage> GetTimeoutPolicy()
+        {
+            return Policy.TimeoutAsync<HttpResponseMessage>(TimeSpan.FromSeconds(10));
         }
     }
 }

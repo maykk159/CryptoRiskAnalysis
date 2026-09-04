@@ -155,6 +155,43 @@ namespace CryptoRiskAnalysis.Tests.Services
                 ItExpr.IsAny<CancellationToken>());
         }
 
+        [Fact]
+        public async Task GetAllMarketDataAsync_ExcludesOpenCandle()
+        {
+            var mockResponse = new HttpResponseMessage
+            {
+                StatusCode = HttpStatusCode.OK,
+                Content = new StringContent(GetMockBinanceResponseWithOpenCandle())
+            };
+
+            _mockHttpHandler.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.Is<HttpRequestMessage>(request =>
+                        request.RequestUri != null &&
+                        request.RequestUri.Query.Contains("interval=1d") &&
+                        request.RequestUri.Query.Contains("limit=31")),
+                    ItExpr.IsAny<CancellationToken>())
+                .ReturnsAsync(mockResponse);
+
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var service = new BinanceSpotService(_httpClient, cache, _mockLogger.Object);
+
+            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync("bitcoin", 30);
+
+            Assert.Equal(2, priceHistory.Count);
+            Assert.Equal(200m, priceHistory[^1].Price);
+            Assert.Equal(2000m, currentVolume);
+            Assert.Equal(1500m, avgVolume);
+        }
+
+        [Fact]
+        public void Polygon_UsesCurrentBinanceSymbol()
+        {
+            Assert.Equal("POLUSDT", BinanceSymbolMapper.GetBinanceSymbol("polygon-ecosystem-token"));
+            Assert.Equal("POLUSDT", BinanceSymbolMapper.GetBinanceSymbol("matic-network"));
+        }
+
         private string GetMockBinanceResponse()
         {
             // Mock Binance klines response (3 candles)
@@ -163,6 +200,19 @@ namespace CryptoRiskAnalysis.Tests.Services
                 [1705363200000,""42500.00"",""44000.00"",""42000.00"",""43000.00"",""1100.0"",1705449599999,""47300000"",1100,""550.00"",""23650000"",""0""],
                 [1705449600000,""43000.00"",""43500.00"",""42500.00"",""43200.00"",""1050.0"",1705535999999,""45360000"",1050,""525.00"",""22680000"",""0""]
             ]";
+        }
+
+        private static string GetMockBinanceResponseWithOpenCandle()
+        {
+            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var klines = new object[][]
+            {
+                new object[] { now - 172_800_000, "100", "110", "90", "100", "1000", now - 86_400_001 },
+                new object[] { now - 86_400_000, "200", "210", "190", "200", "2000", now - 1 },
+                new object[] { now, "300", "310", "290", "300", "3000", now + 86_399_999 }
+            };
+
+            return JsonSerializer.Serialize(klines);
         }
     }
 }

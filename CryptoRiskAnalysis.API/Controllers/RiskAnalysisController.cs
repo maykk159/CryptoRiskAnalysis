@@ -2,11 +2,13 @@ using CryptoRiskAnalysis.API.DTOs;
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace CryptoRiskAnalysis.API.Controllers
 {
     [ApiController]
     [Route("api/[controller]")]
+    [EnableRateLimiting("RiskAnalysis")]
     public class RiskAnalysisController : ControllerBase
     {
         private readonly ICryptoDataService _cryptoDataService;
@@ -26,7 +28,8 @@ namespace CryptoRiskAnalysis.API.Controllers
         [HttpGet("{assetId}")]
         public async Task<ActionResult<ApiResponse<RiskAnalysisResponseDto>>> GetRiskAnalysis(
             string assetId, 
-            [FromQuery] int days = 30)
+            [FromQuery] int days = 30,
+            CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("Received risk analysis request for {AssetId} over {Days} days", assetId, days);
 
@@ -42,7 +45,10 @@ namespace CryptoRiskAnalysis.API.Controllers
             int calculationDays = Math.Max(days, 30);
 
             // 1. Fetch ALL data in one call (optimized!)
-            var (priceHistory, currentVolume, avgVolume) = await _cryptoDataService.GetAllMarketDataAsync(assetId, calculationDays);
+            var (priceHistory, currentVolume, avgVolume) = await _cryptoDataService.GetAllMarketDataAsync(
+                assetId,
+                calculationDays,
+                cancellationToken);
             
             if (priceHistory == null || !priceHistory.Any())
             {

@@ -3,6 +3,7 @@ using CryptoRiskAnalysis.API.Models;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
+using CryptoRiskAnalysis.API.Exceptions;
 
 namespace CryptoRiskAnalysis.API.Services
 {
@@ -26,7 +27,10 @@ namespace CryptoRiskAnalysis.API.Services
         /// HTTP retries (on 5xx and 429) are handled automatically by the Polly policy
         /// configured in ServiceCollectionExtensions — no manual retry loop needed here.
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(string assetId, int days)
+        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+            string assetId,
+            int days,
+            CancellationToken cancellationToken = default)
         {
             // 1. Map CoinGecko ID to Binance symbol
             var symbol = BinanceSymbolMapper.GetBinanceSymbol(assetId);
@@ -43,72 +47,93 @@ namespace CryptoRiskAnalysis.API.Services
 
             _logger.LogInformation("Binance Cache MISS for {AssetId} ({Symbol}) — fetching from API", assetId, symbol);
 
-            // 3. Determine interval and limit based on time range
+            // 3. Request one extra candle because Binance includes the currently open daily candle.
+            // The open candle is filtered below so risk calculations only use completed days.
             var (interval, limit) = GetKlineParams(days);
             var url = $"{BaseUrl}/klines?symbol={symbol}&interval={interval}&limit={limit}";
 
             // 4. Fetch — Polly retries on transient errors and 429 automatically
-            var response = await _httpClient.GetAsync(url);
-            response.EnsureSuccessStatusCode();
-
-            var content = await response.Content.ReadAsStringAsync();
-            var klines = JsonSerializer.Deserialize<List<List<JsonElement>>>(content);
-
-            if (klines == null || klines.Count == 0)
-                throw new Exception($"No kline data returned for {symbol}");
-
-            // Filter out any malformed candles to prevent IndexOutOfRangeException
-            var validKlines = klines.Where(k => k.Count >= 6).ToList();
-            if (validKlines.Count == 0)
-                throw new Exception($"No valid kline data returned for {symbol}");
-
-            // 5. Parse klines into PriceData
-            // Binance returns: [timestamp(number), open(string), high(string), low(string), close(string), volume(string), ...]
-            var priceHistory = validKlines.Select(k => new PriceData
+            HttpResponseMessage response;
+            try
             {
-                // Timestamp is a number
-                Timestamp = k[0].ValueKind == JsonValueKind.Number
-                    ? k[0].GetInt64()
-                    : long.Parse(k[0].GetString()!),
-                // Close price is index 4 — use InvariantCulture to handle decimal points correctly
-                Price = k[4].ValueKind == JsonValueKind.String
-                    ? decimal.Parse(k[4].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                    : k[4].GetDecimal()
-            }).OrderBy(p => p.Timestamp).ToList();
-
-            // 6. Calculate volume metrics (volume is at index 5)
-            // Use the last COMPLETED candle (index ^2) — not the live candle which starts at 0.
-            var volumes = validKlines.Select(k =>
-                k[5].ValueKind == JsonValueKind.String
-                    ? decimal.Parse(k[5].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                    : k[5].GetDecimal()
-            ).ToList();
-
-            decimal currentVolume;
-            decimal avgVolume;
-
-            if (volumes.Count >= 2)
-            {
-                currentVolume = volumes[volumes.Count - 2]; // last completed candle
-                avgVolume = volumes.Take(volumes.Count - 1).Average();
-                _logger.LogInformation("Volume for {Symbol}: LastCompleted={Vol:F0}, Avg={Avg:F0}", symbol, currentVolume, avgVolume);
+                response = await _httpClient.GetAsync(url, cancellationToken);
             }
-            else
+            catch (HttpRequestException ex)
             {
-                currentVolume = volumes.Last();
-                avgVolume = currentVolume;
+                throw new MarketDataProviderException("Binance", ex);
             }
 
-            var result = (priceHistory, currentVolume, avgVolume);
+            using (response)
+            {
+                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                    throw new UpstreamRateLimitException("Binance");
+                if (!response.IsSuccessStatusCode)
+                    throw new MarketDataProviderException("Binance", response.StatusCode);
 
-            // 7. Cache for 1 minute
-            _cache.Set(cacheKey, result, new MemoryCacheEntryOptions()
-                .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
+                var content = await response.Content.ReadAsStringAsync(cancellationToken);
+                var klines = JsonSerializer.Deserialize<List<List<JsonElement>>>(content);
 
-            _logger.LogInformation("Binance: Fetched {Count} candles for {AssetId} ({Symbol}) — cached for {Duration}s",
-                priceHistory.Count, assetId, symbol, CacheDurationSeconds);
+                if (klines == null || klines.Count == 0)
+                    throw new Exception($"No kline data returned for {symbol}");
 
-            return result;
+                // Binance kline index 6 is the candle close time. Exclude the currently open
+                // daily candle so a partial day cannot distort volatility and trend metrics.
+                var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                var completedKlines = klines
+                    .Where(k => k.Count >= 7)
+                    .Where(k => ReadInt64(k[6]) < nowUnixMilliseconds)
+                    .OrderBy(k => ReadInt64(k[0]))
+                    .TakeLast(days)
+                    .ToList();
+
+                if (completedKlines.Count == 0)
+                    throw new Exception($"No completed kline data returned for {symbol}");
+
+                // 5. Parse klines into PriceData
+                // Binance returns: [timestamp(number), open(string), high(string), low(string), close(string), volume(string), ...]
+                var priceHistory = completedKlines.Select(k => new PriceData
+                {
+                    // Timestamp is a number
+                    Timestamp = ReadInt64(k[0]),
+                    // Close price is index 4 — use InvariantCulture to handle decimal points correctly
+                    Price = k[4].ValueKind == JsonValueKind.String
+                        ? decimal.Parse(k[4].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                        : k[4].GetDecimal()
+                }).OrderBy(p => p.Timestamp).ToList();
+
+                // 6. Calculate volume metrics from the same completed daily candles.
+                var volumes = completedKlines.Select(k =>
+                    k[5].ValueKind == JsonValueKind.String
+                        ? decimal.Parse(k[5].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                        : k[5].GetDecimal()
+                ).ToList();
+
+                decimal currentVolume;
+                decimal avgVolume;
+
+                if (volumes.Count > 0)
+                {
+                    currentVolume = volumes[^1];
+                    avgVolume = volumes.Average();
+                    _logger.LogInformation("Volume for {Symbol}: LastCompleted={Vol:F0}, Avg={Avg:F0}", symbol, currentVolume, avgVolume);
+                }
+                else
+                {
+                    currentVolume = 0;
+                    avgVolume = 0;
+                }
+
+                var result = (priceHistory, currentVolume, avgVolume);
+
+                // 7. Cache for 1 minute
+                _cache.Set(cacheKey, result, new MemoryCacheEntryOptions()
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
+
+                _logger.LogInformation("Binance: Fetched {Count} candles for {AssetId} ({Symbol}) — cached for {Duration}s",
+                    priceHistory.Count, assetId, symbol, CacheDurationSeconds);
+
+                return result;
+            }
         }
 
         /// <summary>
@@ -117,31 +142,38 @@ namespace CryptoRiskAnalysis.API.Services
         /// </summary>
         private static (string interval, int limit) GetKlineParams(int days)
         {
-            return days switch
-            {
-                7 => ("1d", 7),        // 7 days
-                30 => ("1d", 30),      // 30 days
-                90 => ("1d", 90),      // 90 days
-                _ => ("1d", days)      // Default: daily candles
-            };
+            return ("1d", Math.Min(days + 1, 1000));
+        }
+
+        private static long ReadInt64(JsonElement value)
+        {
+            return value.ValueKind == JsonValueKind.Number
+                ? value.GetInt64()
+                : long.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture);
         }
 
         // Legacy methods (not used in optimized flow, but required by interface)
-        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(string assetId, int days)
+        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(
+            string assetId,
+            int days,
+            CancellationToken cancellationToken = default)
         {
-            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days);
+            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
             return priceHistory;
         }
 
-        public async Task<decimal> GetCurrentVolumeAsync(string assetId)
+        public async Task<decimal> GetCurrentVolumeAsync(string assetId, CancellationToken cancellationToken = default)
         {
-            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1);
+            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1, cancellationToken);
             return currentVolume;
         }
 
-        public async Task<decimal> GetAverageVolumeAsync(string assetId, int days)
+        public async Task<decimal> GetAverageVolumeAsync(
+            string assetId,
+            int days,
+            CancellationToken cancellationToken = default)
         {
-            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days);
+            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
             return avgVolume;
         }
     }

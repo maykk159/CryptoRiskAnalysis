@@ -82,6 +82,38 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
+        public void CalculateDownsideRisk_UsesZeroTargetAndAllReturnPeriods()
+        {
+            // Arrange - Two downside periods and two periods above the 0% target.
+            // Standard downside deviation keeps all four periods in the denominator.
+            var logReturns = new[] { -0.10, 0.05, -0.20, 0.10 };
+            var priceHistory = new List<PriceData>();
+            var price = 100d;
+            priceHistory.Add(new PriceData { Timestamp = 1000, Price = (decimal)price });
+
+            for (int i = 0; i < logReturns.Length; i++)
+            {
+                price *= Math.Exp(logReturns[i]);
+                priceHistory.Add(new PriceData
+                {
+                    Timestamp = 2000 + i * 1000,
+                    Price = (decimal)price
+                });
+            }
+
+            var expectedDailyDeviation = Math.Sqrt((0.10 * 0.10 + 0.20 * 0.20) / logReturns.Length);
+            var expectedAnnualizedPercent = Math.Round(
+                (decimal)(expectedDailyDeviation * Math.Sqrt(365) * 100),
+                2);
+
+            // Act
+            var result = _engine.CalculateRisk(priceHistory, 1000m, 1000m);
+
+            // Assert
+            Assert.Equal(expectedAnnualizedPercent, result.DownsideRisk);
+        }
+
+        [Fact]
         public void CalculateVaR_With7Days_UsesWorstReturn()
         {
             // Arrange - 7 days of data
