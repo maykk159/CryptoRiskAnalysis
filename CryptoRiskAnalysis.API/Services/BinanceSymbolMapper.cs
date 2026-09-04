@@ -23,7 +23,8 @@ namespace CryptoRiskAnalysis.API.Services
             { "polkadot", "DOTUSDT" },
             { "bitcoin-cash", "BCHUSDT" },
             { "chainlink", "LINKUSDT" },
-            { "matic-network", "MATICUSDT" },
+            { "polygon-ecosystem-token", "POLUSDT" },
+            { "matic-network", "POLUSDT" }, // Legacy CoinGecko ID
             { "near", "NEARUSDT" },
             { "internet-computer", "ICPUSDT" },
             { "litecoin", "LTCUSDT" },

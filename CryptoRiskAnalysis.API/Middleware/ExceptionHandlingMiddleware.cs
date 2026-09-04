@@ -1,7 +1,10 @@
 using System.Net;
 using System.Text.Json;
 using CryptoRiskAnalysis.API.Wrappers;
+using CryptoRiskAnalysis.API.Exceptions;
 using Microsoft.Extensions.Hosting;
+using Polly.CircuitBreaker;
+using Polly.Timeout;
 
 namespace CryptoRiskAnalysis.API.Middleware
 {
@@ -24,6 +27,10 @@ namespace CryptoRiskAnalysis.API.Middleware
             {
                 await _next(context);
             }
+            catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+            {
+                _logger.LogDebug("Request was cancelled by the client.");
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An unhandled exception occurred.");
@@ -34,10 +41,27 @@ namespace CryptoRiskAnalysis.API.Middleware
         private async Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
             context.Response.ContentType = "application/json";
-            context.Response.StatusCode = (int)HttpStatusCode.InternalServerError;
+            context.Response.StatusCode = exception switch
+            {
+                AssetNotFoundException => (int)HttpStatusCode.NotFound,
+                UpstreamRateLimitException => (int)HttpStatusCode.TooManyRequests,
+                MarketDataProviderException => (int)HttpStatusCode.BadGateway,
+                BrokenCircuitException => (int)HttpStatusCode.ServiceUnavailable,
+                TimeoutRejectedException => (int)HttpStatusCode.GatewayTimeout,
+                TimeoutException => (int)HttpStatusCode.GatewayTimeout,
+                _ => (int)HttpStatusCode.InternalServerError
+            };
 
             // In production, hide the exception message for security
-            string message = _env.IsDevelopment() ? exception.Message : "Internal Server Error";
+            string message = exception switch
+            {
+                AssetNotFoundException or UpstreamRateLimitException => exception.Message,
+                MarketDataProviderException => "Market data provider is temporarily unavailable.",
+                BrokenCircuitException => "Market data provider is temporarily unavailable.",
+                TimeoutRejectedException or TimeoutException => "Market data request timed out.",
+                _ when _env.IsDevelopment() => exception.Message,
+                _ => "Internal Server Error"
+            };
             
             var response = new ApiResponse<string>(message)
             {

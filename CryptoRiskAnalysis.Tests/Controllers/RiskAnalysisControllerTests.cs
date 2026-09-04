@@ -53,7 +53,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 PriceHistory = priceHistory
             };
 
-            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30))
+            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
                 .ReturnsAsync((priceHistory, 1000m, 900m));
             _mockRiskEngine.Setup(e => e.CalculateRisk(It.IsAny<List<PriceData>>(), 1000m, 900m))
                 .Returns(riskResult);
@@ -90,7 +90,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
         {
             // Arrange
             var assetId = "invalid_coin";
-            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30))
+            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
                 .ReturnsAsync((new List<PriceData>(), 0m, 0m));
 
             // Act
@@ -108,7 +108,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
         {
             // Arrange
             var assetId = "bitcoin";
-            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30))
+            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
                 .ThrowsAsync(new Exception("API failure"));
 
             // Act & Assert - Controller delegates exception to global ExceptionHandlingMiddleware at runtime
@@ -137,7 +137,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 PriceHistory = priceHistory
             };
 
-            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30))
+            _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
                 .ReturnsAsync((priceHistory, 1000m, 900m));
             _mockRiskEngine.Setup(e => e.CalculateRisk(It.IsAny<List<PriceData>>(), 1000m, 900m))
                 .Returns(riskResult);

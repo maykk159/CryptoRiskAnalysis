@@ -29,7 +29,10 @@ namespace CryptoRiskAnalysis.API.Services
         /// 1. Try Binance first (1-min cache, 1200 req/min limit)
         /// 2. Fallback to CoinGecko if needed (3-min cache, ~10-50 req/min limit)
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(string assetId, int days)
+        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+            string assetId,
+            int days,
+            CancellationToken cancellationToken = default)
         {
             // Try Binance first for supported assets
             if (BinanceSymbolMapper.IsAvailableOnBinance(assetId))
@@ -37,7 +40,11 @@ namespace CryptoRiskAnalysis.API.Services
                 try
                 {
                     _logger.LogInformation("Attempting Binance for {AssetId}", assetId);
-                    return await _binanceService.GetAllMarketDataAsync(assetId, days);
+                    return await _binanceService.GetAllMarketDataAsync(assetId, days, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
                 }
                 catch (Exception ex)
                 {
@@ -50,25 +57,31 @@ namespace CryptoRiskAnalysis.API.Services
             }
 
             // Fallback to CoinGecko
-            return await _coinGeckoService.GetAllMarketDataAsync(assetId, days);
+            return await _coinGeckoService.GetAllMarketDataAsync(assetId, days, cancellationToken);
         }
 
         // Legacy interface methods - delegate to GetAllMarketDataAsync
-        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(string assetId, int days)
+        public async Task<List<PriceData>> GetHistoricalPriceDataAsync(
+            string assetId,
+            int days,
+            CancellationToken cancellationToken = default)
         {
-            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days);
+            var (priceHistory, _, _) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
             return priceHistory;
         }
 
-        public async Task<decimal> GetCurrentVolumeAsync(string assetId)
+        public async Task<decimal> GetCurrentVolumeAsync(string assetId, CancellationToken cancellationToken = default)
         {
-            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1);
+            var (_, currentVolume, _) = await GetAllMarketDataAsync(assetId, 1, cancellationToken);
             return currentVolume;
         }
 
-        public async Task<decimal> GetAverageVolumeAsync(string assetId, int days)
+        public async Task<decimal> GetAverageVolumeAsync(
+            string assetId,
+            int days,
+            CancellationToken cancellationToken = default)
         {
-            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days);
+            var (_, _, avgVolume) = await GetAllMarketDataAsync(assetId, days, cancellationToken);
             return avgVolume;
         }
     }

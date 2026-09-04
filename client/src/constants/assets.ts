@@ -16,7 +16,7 @@ export const ASSETS = [
     { id: 'polkadot', name: 'Polkadot', ticker: 'DOT', symbol: 'dot', icon: 'https://cryptologos.cc/logos/polkadot-new-dot-logo.png' },
     { id: 'bitcoin-cash', name: 'Bitcoin Cash', ticker: 'BCH', symbol: 'bch', icon: getIconUrl('bch') },
     { id: 'chainlink', name: 'Chainlink', ticker: 'LINK', symbol: 'link', icon: getIconUrl('link') },
-    { id: 'matic-network', name: 'Polygon', ticker: 'MATIC', symbol: 'matic', icon: 'https://cryptologos.cc/logos/polygon-matic-logo.png' },
+    { id: 'polygon-ecosystem-token', name: 'Polygon', ticker: 'POL', symbol: 'pol', icon: 'https://cryptologos.cc/logos/polygon-ecosystem-token-pol-logo.png' },
     { id: 'near', name: 'NEAR Protocol', ticker: 'NEAR', symbol: 'near', icon: 'https://cryptologos.cc/logos/near-protocol-near-logo.png' },
     { id: 'internet-computer', name: 'Internet Computer', ticker: 'ICP', symbol: 'icp', icon: 'https://cryptologos.cc/logos/internet-computer-icp-logo.png' },
     { id: 'litecoin', name: 'Litecoin', ticker: 'LTC', symbol: 'ltc', icon: getIconUrl('ltc') },

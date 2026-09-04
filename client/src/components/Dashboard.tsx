@@ -18,37 +18,15 @@ export const Dashboard: React.FC = () => {
   // Benefits: automatic cache, deduped requests, background refetch, proper loading/error states
   const { data, isLoading, error } = useQuery({
     queryKey: ['risk', selectedAssetId, selectedTimeRange],
-    queryFn: () => getRiskAnalysis(selectedAssetId, selectedTimeRange),
+    queryFn: ({ signal }) => getRiskAnalysis(selectedAssetId, selectedTimeRange, signal),
   });
 
   // Type-safe error message — no more catch (err: any)
   const errorMessage = error ? getErrorMessage(error, selectedAsset.name) : null;
 
-  // Stable price cache to prevent different ranges (7, 30, 90) from showing different prices
-  const [assetPrices, setAssetPrices] = useState<Record<string, number>>({});
-
   const latestPrice = data?.priceHistory && data.priceHistory.length > 0
     ? data.priceHistory[data.priceHistory.length - 1].price
     : undefined;
-
-  // Sync and lock high-resolution prices
-  useState(() => {
-    // Empty initializer
-  });
-
-  // Preserve the more precise 7/30 day price when switching to the 90-day view
-  const currentPrice = assetPrices[selectedAssetId] ?? latestPrice;
-
-  // We use useEffect to update the price cache
-  if (latestPrice !== undefined && assetPrices[selectedAssetId] !== latestPrice) {
-    // Only update if it's a 7/30 day view or we don't have a cached price yet
-    if (selectedTimeRange !== 90 || assetPrices[selectedAssetId] === undefined) {
-      setAssetPrices(prev => ({
-        ...prev,
-        [selectedAssetId]: latestPrice
-      }));
-    }
-  }
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-8">
@@ -94,7 +72,7 @@ export const Dashboard: React.FC = () => {
         {/* Content */}
         {!isLoading && !errorMessage && data && (
           <div className="grid grid-cols-1 gap-8">
-            <RiskScoreCard data={data} asset={selectedAsset} currentPrice={currentPrice} />
+            <RiskScoreCard data={data} asset={selectedAsset} currentPrice={latestPrice} />
             <AdvancedMetrics data={data} />
             <PriceChart data={data.priceHistory} timeRange={selectedTimeRange} />
           </div>

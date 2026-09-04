@@ -19,7 +19,6 @@ export function useAnimatedNumber(
   useEffect(() => {
     let startTime: number | null = null;
     let animationFrameId: number;
-    let timeoutId: number;
 
     const easeOut = (t: number) => 1 - Math.pow(1 - t, 3); // Cubic ease-out
 
@@ -38,9 +37,8 @@ export function useAnimatedNumber(
       }
     };
 
-    setValue(0); // Reset immediately when target changes
-
-    timeoutId = window.setTimeout(() => {
+    const timeoutId = window.setTimeout(() => {
+      setValue(0);
       animationFrameId = requestAnimationFrame(animate);
     }, delay + 50);
 
