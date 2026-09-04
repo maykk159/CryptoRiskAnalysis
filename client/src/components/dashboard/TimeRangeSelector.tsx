@@ -13,17 +13,19 @@ export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({ value, onC
     ];
 
     return (
-        <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+        <fieldset className="mb-6">
+            <legend className="block text-sm font-medium text-gray-300 mb-2">
                 Analysis Period
-            </label>
+            </legend>
             <div className="flex gap-2">
                 {timeRanges.map(({ days, label }) => (
                     <button
+                        type="button"
                         key={days}
                         onClick={() => onChange(days)}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors ${value === days
-                                ? 'bg-blue-500 text-white'
+                        aria-pressed={value === days}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900 ${value === days
+                                ? 'bg-blue-700 text-white hover:bg-blue-600'
                                 : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
                             }`}
                     >
@@ -31,6 +33,6 @@ export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({ value, onC
                     </button>
                 ))}
             </div>
-        </div>
+        </fieldset>
     );
 };

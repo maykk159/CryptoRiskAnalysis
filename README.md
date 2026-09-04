@@ -3,6 +3,7 @@
 [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![CI](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml/badge.svg)](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml)
 
 Crypto Risk Analysis is a full-stack dashboard for exploring the market risk of cryptocurrency assets. It combines completed daily candles from Binance and CoinGecko with a local risk engine that calculates volatility, momentum, volume, drawdown, Sharpe ratio, downside risk, and historical Value at Risk.
 
@@ -66,7 +67,7 @@ Transient network errors, upstream `5xx` responses, and `429` responses are retr
 | Frontend | React 19, TypeScript 5.9, Vite 7 |
 | UI and charts | Tailwind CSS, Recharts, Lucide React |
 | Server-state management | TanStack Query |
-| Tests | xUnit, Moq |
+| Tests | xUnit, Moq, Vitest |
 
 ## Getting started
 
@@ -234,10 +235,13 @@ Validate the frontend:
 ```bash
 cd client
 npm run lint
+npm test
 npm run build
 ```
 
-The backend suite covers the controller, risk engine, Binance and CoinGecko normalization, caching, provider errors, cancellation, and hybrid fallback behavior.
+The backend suite covers controller behavior, cancellation propagation, the risk engine, Binance and CoinGecko validation, caching and concurrent-request deduplication, provider errors, hybrid fallback, retry/timeout/circuit behavior, exception middleware, and the rate-limit JSON response. Frontend tests cover low-price formatting and user-facing network errors.
+
+GitHub Actions runs the backend warning-as-error build and test suite plus the frontend install, lint, test, and production build on every push and pull request.
 
 ## Project structure
 
@@ -252,6 +256,7 @@ CryptoRiskAnalysis/
 │   ├── Models/                   Price and risk domain models
 │   └── Services/                 Providers, routing, and risk calculations
 ├── CryptoRiskAnalysis.Tests/     xUnit backend tests
+├── .github/workflows/ci.yml      Backend and frontend CI
 ├── client/                       React and TypeScript application
 │   └── src/
 │       ├── components/           Dashboard and chart components
@@ -267,7 +272,7 @@ CryptoRiskAnalysis/
 
 Local development intentionally uses HTTP and permits the local Vite origins. Before deploying publicly:
 
-- terminate TLS at the application or a trusted reverse proxy;
+- configure a Kestrel HTTPS certificate or terminate TLS at a trusted reverse proxy (production HTTP requests are redirected to HTTPS port 443);
 - replace the local CORS origins with the deployed frontend origin;
 - run with `ASPNETCORE_ENVIRONMENT=Production` so internal exception details are hidden;
 - review rate limits and caching for the expected traffic profile;

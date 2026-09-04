@@ -8,8 +8,8 @@ using Polly.Timeout;
 namespace CryptoRiskAnalysis.API.Services
 {
     /// <summary>
-    /// Hybrid service that uses Binance for better rate limits and fresh data,
-    /// with automatic fallback to CoinGecko for unsupported assets
+    /// Hybrid service that uses Binance for mapped assets and falls back to
+    /// CoinGecko for unsupported assets and expected provider failures.
     /// </summary>
     public class HybridCryptoDataService : ICryptoDataService
     {
@@ -29,8 +29,8 @@ namespace CryptoRiskAnalysis.API.Services
 
         /// <summary>
         /// Fetches market data with smart routing:
-        /// 1. Try Binance first (1-min cache, 1200 req/min limit)
-        /// 2. Fallback to CoinGecko if needed (3-min cache, ~10-50 req/min limit)
+        /// 1. Try Binance first for mapped assets (1-minute cache).
+        /// 2. Fall back to CoinGecko when needed (3-minute cache).
         /// </summary>
         public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
             string assetId,

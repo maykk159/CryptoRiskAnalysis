@@ -25,7 +25,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             using var coinGeckoCache = new MemoryCache(new MemoryCacheOptions());
             var service = CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache);
 
-            var result = await service.GetAllMarketDataAsync("bitcoin", 1);
+            var result = await service.GetAllMarketDataAsync(
+                "bitcoin", 1, TestContext.Current.CancellationToken);
 
             Assert.Equal(1, coinGeckoCalls);
             Assert.Single(result.priceHistory);
@@ -80,7 +81,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             using var coinGeckoCache = new MemoryCache(new MemoryCacheOptions());
             var service = CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache);
 
-            var result = await service.GetAllMarketDataAsync("bitcoin", 1);
+            var result = await service.GetAllMarketDataAsync(
+                "bitcoin", 1, TestContext.Current.CancellationToken);
 
             Assert.Equal(1, coinGeckoCalls);
             Assert.Single(result.priceHistory);
@@ -102,7 +104,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache);
 
             await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                service.GetAllMarketDataAsync("bitcoin", 30));
+                service.GetAllMarketDataAsync("bitcoin", 30, TestContext.Current.CancellationToken));
             Assert.Equal(0, coinGeckoCalls);
         }
 

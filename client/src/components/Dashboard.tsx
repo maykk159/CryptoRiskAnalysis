@@ -16,23 +16,26 @@ export const Dashboard: React.FC = () => {
 
   // Replaces: useEffect + useState(loading) + useState(error) + useState(data) + useCallback + axios
   // Benefits: automatic cache, deduped requests, background refetch, proper loading/error states
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, isRefetchError } = useQuery({
     queryKey: ['risk', selectedAssetId, selectedTimeRange],
     queryFn: ({ signal }) => getRiskAnalysis(selectedAssetId, selectedTimeRange, signal),
   });
 
   // Type-safe error message — no more catch (err: any)
-  const errorMessage = error ? getErrorMessage(error, selectedAsset.name) : null;
+  const errorMessage = !data && error ? getErrorMessage(error, selectedAsset.name) : null;
+  const refetchErrorMessage = data && isRefetchError && error
+    ? getErrorMessage(error, selectedAsset.name)
+    : null;
 
   const latestPrice = data?.priceHistory && data.priceHistory.length > 0
     ? data.priceHistory[data.priceHistory.length - 1].price
     : undefined;
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-8">
+    <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
       <div className="max-w-7xl mx-auto">
-        <header className="mb-10">
-          <h1 className="text-4xl font-extrabold tracking-tight flex items-center gap-3 flex-wrap">
+        <header className="mb-8 sm:mb-10">
+          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight flex items-center gap-3 flex-wrap">
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-indigo-500">
               CIPHER
             </span>
@@ -57,21 +60,44 @@ export const Dashboard: React.FC = () => {
 
         {/* Loading */}
         {isLoading && (
-          <div className="flex justify-center items-center h-64">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" />
+          <div
+            className="flex justify-center items-center h-64"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" aria-hidden="true" />
+            <span className="sr-only">Loading risk analysis for {selectedAsset.name}.</span>
           </div>
         )}
 
         {/* Error */}
         {errorMessage && (
-          <div className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg mb-6">
+          <div
+            className="bg-red-900/50 border border-red-500 text-red-200 p-4 rounded-lg mb-6"
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
+          >
             {errorMessage}
           </div>
         )}
 
+        {/* A background refresh failure must not hide the last successful result. */}
+        {refetchErrorMessage && (
+          <div
+            className="bg-amber-900/40 border border-amber-500 text-amber-100 p-4 rounded-lg mb-6"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            Refresh failed: {refetchErrorMessage} Showing the last successfully loaded data.
+          </div>
+        )}
+
         {/* Content */}
-        {!isLoading && !errorMessage && data && (
-          <div className="grid grid-cols-1 gap-8">
+        {!isLoading && data && (
+          <div className="grid grid-cols-1 gap-6 sm:gap-8 min-w-0">
             <RiskScoreCard data={data} asset={selectedAsset} currentPrice={latestPrice} />
             <AdvancedMetrics data={data} />
             <PriceChart data={data.priceHistory} timeRange={selectedTimeRange} />

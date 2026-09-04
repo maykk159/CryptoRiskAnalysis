@@ -38,7 +38,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                     <div>
                         <p className="text-gray-400 text-sm font-medium mb-1">Downside Risk</p>
                         <p className="text-white text-2xl font-bold">{data.downsideRisk.toFixed(2)}%</p>
-                        <p className="text-gray-500 text-xs mt-1">Downside volatility only</p>
+                        <p className="text-gray-400 text-xs mt-1">Downside volatility only</p>
                     </div>
                 </div>
 
@@ -50,7 +50,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                     <div>
                         <p className="text-gray-400 text-sm font-medium mb-1">Max Drawdown</p>
                         <p className="text-red-400 text-2xl font-bold">{formatLossPercentage(data.maxDrawdown)}</p>
-                        <p className="text-gray-500 text-xs mt-1">Worst-case decline</p>
+                        <p className="text-gray-400 text-xs mt-1">Worst-case decline</p>
                     </div>
                 </div>
 
@@ -67,7 +67,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                             }`}>
                             {data.sharpeRatio.toFixed(2)}
                         </p>
-                        <p className="text-gray-500 text-xs mt-1">Risk-adjusted return</p>
+                        <p className="text-gray-400 text-xs mt-1">Risk-adjusted return</p>
                     </div>
                 </div>
 
@@ -79,7 +79,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                     <div>
                         <p className="text-gray-400 text-sm font-medium mb-1">VaR (95%)</p>
                         <p className="text-orange-400 text-2xl font-bold">{formatLossPercentage(data.valueAtRisk95)}</p>
-                        <p className="text-gray-500 text-xs mt-1">95% confidence loss</p>
+                        <p className="text-gray-400 text-xs mt-1">95% confidence loss</p>
                     </div>
                 </div>
 
@@ -91,7 +91,7 @@ export const AdvancedMetrics: React.FC<AdvancedMetricsProps> = ({ data }) => {
                     <div>
                         <p className="text-gray-400 text-sm font-medium mb-1">Annualized Volatility</p>
                         <p className="text-blue-400 text-2xl font-bold">{data.annualizedVolatility.toFixed(2)}%</p>
-                        <p className="text-gray-500 text-xs mt-1">Historical price volatility</p>
+                        <p className="text-gray-400 text-xs mt-1">Historical price volatility</p>
                     </div>
                 </div>
             </div>

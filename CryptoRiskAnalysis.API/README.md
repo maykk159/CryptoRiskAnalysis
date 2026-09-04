@@ -1,199 +1,101 @@
-# 🔧 Backend - Crypto Risk Analysis API
+# Crypto Risk Analysis API
 
-.NET 10 Web API with Clean Architecture for cryptocurrency risk analysis.
+ASP.NET Core Web API for retrieving validated daily cryptocurrency market data and producing heuristic risk metrics.
 
-## 📋 Requirements
+The backend targets **.NET 10** and is organized into folders inside a single Web API project. Controllers, services, models, middleware, and provider adapters are separated by responsibility, but they are not separate Domain/Application/Infrastructure assemblies; this repository therefore does not claim strict Clean Architecture.
 
-- **.NET SDK 8.0.11** or higher
-- **Windows 10+** / **macOS 12+** / **Linux (Ubuntu 20.04+)**
-- **Visual Studio 2022** or **VS Code** (optional)
+## Dependencies
 
-## 🔍 Version Information
+The API uses these external NuGet packages:
 
-```
-.NET SDK: 8.0.11
-C#: 12.0
-ASP.NET Core: 8.0
-Target Framework: net10.0
-```
+- `Microsoft.Extensions.Http.Resilience` for retry, timeout, and circuit-breaker handlers.
+- `Serilog.AspNetCore` for console and rolling-file logging.
+- `Swashbuckle.AspNetCore` for development OpenAPI/Swagger UI.
 
-### NuGet Packages
+## Run locally
 
-No external NuGet packages required! Uses only built-in .NET libraries:
-- `Microsoft.AspNetCore.OpenApi` (included)
-- `Microsoft.Extensions.Caching.Memory` (built-in)
-- `System.Text.Json` (built-in)
+From the repository root:
 
-## 🚀 Installation
-
-### 1. Restore Dependencies
 ```powershell
 cd CryptoRiskAnalysis.API
 dotnet restore
+dotnet run
 ```
 
-### 2. Build
-```powershell
-dotnet build
+The development API listens on `http://localhost:5058`. Swagger UI is available at `http://localhost:5058/swagger` while the environment is Development.
+
+## Endpoint
+
+```http
+GET /api/RiskAnalysis/{assetId}?days={7|30|90}
 ```
 
-### 3. Run
-```powershell
-dotnet run --project CryptoRiskAnalysis.API/CryptoRiskAnalysis.API.csproj
-```
+- `assetId` is a CoinGecko asset ID such as `bitcoin` or `ethereum`.
+- `days` accepts `7`, `30`, or `90` and defaults to `30`.
+- A successful response contains exactly the requested number of completed daily observations.
 
-Backend will start on: **http://localhost:5058**
+All success and application-generated error responses use the `ApiResponse<T>` envelope:
 
-## 🌐 API Endpoints
-
-### Risk Analysis
-```
-GET /api/RiskAnalysis/{assetId}
-```
-
-**Parameters:**
-- `assetId` (string): Cryptocurrency ID (e.g., "bitcoin", "ethereum")
-
-**Response:**
 ```json
 {
-  "assetId": "bitcoin",
-  "compositeRiskScore": 17.9,
-  "volatilityScore": 15.2,
-  "trendScore": 22.1,
-  "volumeScore": 18.5,
-  "priceHistory": [
-    {
-      "timestamp": 1701648000000,
-      "price": 43250.50
-    }
-  ]
+  "succeeded": true,
+  "message": null,
+  "data": {
+    "assetId": "bitcoin",
+    "compositeRiskScore": 31.42,
+    "volatilityScore": 38.17,
+    "trendScore": 24.86,
+    "volumeScore": 29.35,
+    "priceHistory": []
+  },
+  "errors": null
 }
 ```
 
-### Swagger UI
-Open [http://localhost:5058/swagger](http://localhost:5058/swagger) to test API interactively.
+The values above only demonstrate the response shape; live results depend on provider data and the selected period.
 
-## 📁 Project Structure
+## Data providers and resilience
 
-```
-CryptoRiskAnalysis.API/
-├── Controllers/
-│   └── RiskAnalysisController.cs    # API endpoints
-│
-├── Services/
-│   ├── HybridCryptoDataService.cs   # Smart routing strategy
-│   ├── BinanceSpotService.cs        # Primary high-speed data
-│   ├── CoinGeckoService.cs          # Fallback data source
-│   ├── BinanceSymbolMapper.cs       # Asset ID mapping
-│   └── RiskAnalysisEngine.cs        # Risk calculation logic
-│
-├── Interfaces/
-│   ├── ICryptoDataService.cs        # Data service abstraction
-│   └── IRiskEngine.cs               # Risk engine abstraction
-│
-├── Models/
-│   ├── PriceData.cs                 # Price data model
-│   └── RiskScoreResult.cs           # Risk result model
-│
-├── DTOs/
-│   └── RiskAnalysisResponseDto.cs   # Response DTO
-│
-├── Wrappers/
-│   └── ApiResponse.cs               # Standard Response Wrapper
-│
-└── Program.cs                        # Application entry point
-```
+- Binance is tried first for mapped assets and uses completed daily USDT klines. Quote-asset turnover is used as the volume measure.
+- CoinGecko is used for unmapped assets and as fallback for expected Binance provider, timeout, rate-limit, and open-circuit failures.
+- Binance results are cached for 60 seconds; CoinGecko results are cached for 180 seconds.
+- Concurrent cache misses for the same provider, asset, and period share one outbound request.
+- Each attempt has a 10-second timeout and the total resilience pipeline has a 30-second timeout.
+- Transient network errors, `408`, `429`, and `5xx` responses are eligible for exponential retry.
 
-## ⚙️ Configuration
+Provider quotas are not stated as fixed numbers here because they depend on endpoint weight, account or plan, IP, and current provider policy. Consult the official [Binance Spot API documentation](https://developers.binance.com/docs/binance-spot-api-docs/rest-api/limits) and [CoinGecko rate-limit documentation](https://docs.coingecko.com/reference/common-errors-rate-limit) when configuring production traffic.
 
-### CORS
-Configured in `Program.cs` to allow frontend on `http://localhost:5173`.
+## HTTP behavior
 
-### Caching
-Hybrid caching strategy:
-- **Binance Data**: 60-second TTL (Freshness)
-- **CoinGecko Data**: 3-minute TTL (Reliability)
+| Status | Meaning |
+|---|---|
+| `200` | Analysis completed |
+| `400` | Unsupported analysis period |
+| `404` | Asset or market data not found |
+| `429` | Application or upstream rate limit reached |
+| `502` | Provider returned unsuccessful, malformed, incomplete, or invalid data |
+| `503` | Provider circuit is open |
+| `504` | Provider request timed out |
+| `500` | Unexpected application error |
 
-### Logging
-Structured logging enabled for tracking:
-- Data source selection (Binance vs CoinGecko)
-- Cache hits/misses
-- Risk calculation inputs
+The application rate limit is 30 requests per minute per remote IP. Its `429` response uses the same JSON envelope.
 
-## 🧪 Testing
+## Local configuration
 
-### Manual Testing with curl
+- CORS permits `http://localhost:5173` and `http://localhost:5174` for local Vite development.
+- Development uses HTTP. Non-development environments enable HSTS and redirect HTTP to HTTPS port 443.
+- No authentication is implemented; add it before exposing a restricted deployment.
+- Provider API keys are not required by the current public endpoint integration.
+
+## Tests
+
+From the repository root:
+
 ```powershell
-# Test Bitcoin (Via Binance)
-curl http://localhost:5058/api/RiskAnalysis/bitcoin
-
-# Test WBTC (Via CoinGecko Fallback)
-curl http://localhost:5058/api/RiskAnalysis/wrapped-bitcoin
+dotnet build CryptoRiskAnalysis.API.sln --configuration Release --no-restore -warnaserror
+dotnet test CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj --configuration Release --no-build
 ```
 
-## 🔒 Security
+The suite covers controller behavior, cancellation propagation, risk calculations, provider validation and fallback, cache-miss deduplication, the retry/timeout/circuit pipeline, exception middleware, and the JSON rate-limit response.
 
-- **No API Keys Required** - Uses Public Endpoints
-- **HTTPS Redirect Disabled** - For local development only
-- **CORS Enabled** - Only for localhost:5173
-- **No Authentication** - This is a demo/learning project
-
-⚠️ **Production Deployment**: Enable HTTPS, add authentication, and configure proper CORS policies.
-
-## 🎯 Performance
-
-### Optimizations
-- **Hybrid Routing**: Uses high-speed Binance API for 90% of requests
-- **Smart Fallback**: Automatically switches to CoinGecko if primary fails
-- **In-Memory Cache**: Tiered TTLs (60s / 180s)
-- **Async/Await**: Non-blocking I/O operations
-
-### Benchmarks
-- **Response Time**: < 50ms (cached), < 800ms (Binance API)
-- **Memory Usage**: ~60-90 MB
-- **Risk Accuracy**: ~98% (Standardized 1d candles)
-
-## 🐛 Troubleshooting
-
-### Port Already in Use
-```powershell
-# Change port in Properties/launchSettings.json
-"applicationUrl": "http://localhost:5058"
-```
-
-### Rate Limits (429)
-- **Binance**: 1200 weight/minute (Very high limit, rarely hit)
-- **CoinGecko**: 10-50 calls/minute (Handled by fallback & caching)
-
-### CORS Error
-- Ensure frontend runs on `http://localhost:5173`
-- Check `Program.cs` CORS configuration
-
-## 📊 Code Statistics
-
-- **Total Lines**: 609
-- **Controllers**: 45 lines
-- **Services**: 465 lines
-- **Models/DTOs**: 99 lines
-- **Complexity**: Low-Medium (Cyclomatic: 3-8)
-
-## 🔧 Development
-
-### Hot Reload
-```powershell
-dotnet watch run --project CryptoRiskAnalysis.API/CryptoRiskAnalysis.API.csproj
-```
-
-### Debug in VS Code
-Press F5 or use `.vscode/launch.json` configuration.
-
-## 📝 License
-
-MIT License - see main [LICENSE](../LICENSE) file
-
-## 🔗 Related
-
-- [Frontend README](../client/README.md)
-- [Main README](../README.md)
-- [CoinGecko API Docs](https://www.coingecko.com/api/documentation)
+See the [repository README](../README.md) for complete setup and frontend instructions.

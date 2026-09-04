@@ -2,32 +2,12 @@ import React from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp } from 'lucide-react';
 import type { PriceData } from '../types';
+import { formatUsdPrice } from '../utils/formatUsdPrice';
 
 interface PriceChartProps {
     data: PriceData[];
     timeRange: number;
 }
-
-const formatUsdPrice = (value: number) => {
-    if (!Number.isFinite(value)) {
-        return '$—';
-    }
-
-    const absoluteValue = Math.abs(value);
-
-    if (absoluteValue !== 0 && absoluteValue < 1e-20) {
-        return `$${value.toLocaleString('en-US', {
-            notation: 'scientific',
-            maximumSignificantDigits: 6
-        })}`;
-    }
-
-    const maximumFractionDigits = absoluteValue > 0 && absoluteValue < 1
-        ? Math.min(20, Math.max(3, 5 - Math.floor(Math.log10(absoluteValue))))
-        : 3;
-
-    return `$${value.toLocaleString('en-US', { maximumFractionDigits })}`;
-};
 
 export const PriceChart: React.FC<PriceChartProps> = ({ data, timeRange }) => {
     const formattedData = React.useMemo(() => data.map(d => {

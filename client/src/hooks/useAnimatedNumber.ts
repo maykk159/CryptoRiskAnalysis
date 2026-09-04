@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 /**
- * Animates a numeric value from 0 to `target` using cubic ease-out.
+ * Animates a numeric value from its current value to `target` using cubic ease-out.
  * Extracted from RiskScoreCard to be reusable and comply with React Rules of Hooks
  * (hooks must be called at the top level of a component, not inside JSX expressions).
  *
@@ -15,10 +15,17 @@ export function useAnimatedNumber(
   delay: number = 0
 ): number {
   const [value, setValue] = useState(0);
+  const valueRef = useRef(0);
 
   useEffect(() => {
     let startTime: number | null = null;
-    let animationFrameId: number;
+    let animationFrameId: number | undefined;
+    const startValue = valueRef.current;
+    const change = target - startValue;
+    const shouldSkipAnimation =
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches || duration <= 0;
+
+    if (change === 0) return;
 
     const easeOut = (t: number) => 1 - Math.pow(1 - t, 3); // Cubic ease-out
 
@@ -26,25 +33,29 @@ export function useAnimatedNumber(
       if (!startTime) startTime = currentTime;
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / duration, 1);
-      const currentVal = target * easeOut(progress);
+      const currentVal = startValue + change * easeOut(progress);
 
+      valueRef.current = currentVal;
       setValue(currentVal);
 
       if (progress < 1) {
         animationFrameId = requestAnimationFrame(animate);
-      } else {
-        setValue(target);
       }
     };
 
     const timeoutId = window.setTimeout(() => {
-      setValue(0);
+      if (shouldSkipAnimation) {
+        valueRef.current = target;
+        setValue(target);
+        return;
+      }
+
       animationFrameId = requestAnimationFrame(animate);
-    }, delay + 50);
+    }, shouldSkipAnimation ? 0 : delay);
 
     return () => {
       clearTimeout(timeoutId);
-      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (animationFrameId !== undefined) cancelAnimationFrame(animationFrameId);
     };
   }, [target, duration, delay]);
 

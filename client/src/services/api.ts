@@ -71,6 +71,13 @@ export function getErrorMessage(err: unknown, assetName?: string): string {
     return 'Request was cancelled.';
   }
 
+  if (
+    err instanceof TypeError ||
+    (err instanceof DOMException && err.name === 'NetworkError')
+  ) {
+    return 'Failed to connect to the server. Please check your internet connection.';
+  }
+
   if (err instanceof Error && err.message) {
     return err.message;
   }

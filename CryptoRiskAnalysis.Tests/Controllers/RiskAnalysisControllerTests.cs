@@ -62,7 +62,8 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 .Returns(riskResult);
 
             // Act
-            var result = await _controller.GetRiskAnalysis(assetId, 30);
+            var result = await _controller.GetRiskAnalysis(
+                assetId, 30, TestContext.Current.CancellationToken);
 
             // Assert - Inspect result.Result because return type is ActionResult<T>
             var okResult = Assert.IsType<OkObjectResult>(result.Result);
@@ -79,7 +80,8 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             var assetId = "bitcoin";
 
             // Act - Pass invalid days (e.g., 0)
-            var result = await _controller.GetRiskAnalysis(assetId, 0);
+            var result = await _controller.GetRiskAnalysis(
+                assetId, 0, TestContext.Current.CancellationToken);
 
             // Assert - Should return 400 Bad Request
             var badRequestResult = Assert.IsType<BadRequestObjectResult>(result.Result);
@@ -97,7 +99,8 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 .ReturnsAsync((new List<PriceData>(), 0m, 0m));
 
             // Act
-            var result = await _controller.GetRiskAnalysis(assetId, 30);
+            var result = await _controller.GetRiskAnalysis(
+                assetId, 30, TestContext.Current.CancellationToken);
 
             // Assert - Inspect result.Result because return type is ActionResult<T>
             var notFoundResult = Assert.IsType<NotFoundObjectResult>(result.Result);
@@ -137,7 +140,8 @@ namespace CryptoRiskAnalysis.Tests.Controllers
 
             // Act & Assert - Controller delegates exception to global ExceptionHandlingMiddleware at runtime
             await Assert.ThrowsAsync<Exception>(async () =>
-                await _controller.GetRiskAnalysis(assetId, 30));
+                await _controller.GetRiskAnalysis(
+                    assetId, 30, TestContext.Current.CancellationToken));
         }
 
         [Fact]
@@ -166,7 +170,8 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 .Returns(riskResult);
 
             // Act - Request 7 days
-            var result = await _controller.GetRiskAnalysis(assetId, 7);
+            var result = await _controller.GetRiskAnalysis(
+                assetId, 7, TestContext.Current.CancellationToken);
 
             var okResult = Assert.IsType<OkObjectResult>(result.Result);
             var response = Assert.IsType<ApiResponse<RiskAnalysisResponseDto>>(okResult.Value);
@@ -176,6 +181,32 @@ namespace CryptoRiskAnalysis.Tests.Controllers
                 service => service.GetAllMarketDataAsync(assetId, 7, It.IsAny<CancellationToken>()),
                 Times.Once);
             _mockRiskEngine.Verify(engine => engine.CalculateRisk(priceHistory, 1000m, 900m), Times.Once);
+        }
+
+        [Fact]
+        public async Task GetRiskAnalysis_PropagatesRequestCancellationToken()
+        {
+            var priceHistory = Enumerable.Range(0, 7)
+                .Select(i => new PriceData
+                {
+                    Timestamp = DateTimeOffset.UtcNow.AddDays(-7 + i).ToUnixTimeMilliseconds(),
+                    Price = 100m + i
+                })
+                .ToList();
+            using var cancellationSource = new CancellationTokenSource();
+            var cancellationToken = cancellationSource.Token;
+            _mockCryptoService
+                .Setup(service => service.GetAllMarketDataAsync("bitcoin", 7, cancellationToken))
+                .ReturnsAsync((priceHistory, 1000m, 900m));
+            _mockRiskEngine
+                .Setup(engine => engine.CalculateRisk(priceHistory, 1000m, 900m))
+                .Returns(new RiskScoreResult { PriceHistory = priceHistory });
+
+            await _controller.GetRiskAnalysis("bitcoin", 7, cancellationToken);
+
+            _mockCryptoService.Verify(
+                service => service.GetAllMarketDataAsync("bitcoin", 7, cancellationToken),
+                Times.Once);
         }
     }
 }

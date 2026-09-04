@@ -42,7 +42,7 @@ namespace CryptoRiskAnalysis.Tests.Services
                     ItExpr.IsAny<CancellationToken>())
                 .ReturnsAsync(mockResponse);
 
-            object cacheValue = null;
+            object? cacheValue = null;
             _mockCache.Setup(c => c.TryGetValue(It.IsAny<object>(), out cacheValue))
                 .Returns(false);
             _mockCache.Setup(c => c.CreateEntry(It.IsAny<object>()))
@@ -51,7 +51,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act
-            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync("bitcoin", 3);
+            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
+                "bitcoin", 3, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.NotNull(priceHistory);
@@ -77,7 +78,7 @@ namespace CryptoRiskAnalysis.Tests.Services
                     ItExpr.IsAny<CancellationToken>())
                 .ReturnsAsync(mockResponse);
 
-            object cacheValue = null;
+            object? cacheValue = null;
             _mockCache.Setup(c => c.TryGetValue(It.IsAny<object>(), out cacheValue))
                 .Returns(false);
             _mockCache.Setup(c => c.CreateEntry(It.IsAny<object>()))
@@ -86,7 +87,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act
-            var (priceHistory, _, _) = await service.GetAllMarketDataAsync("bitcoin", 3);
+            var (priceHistory, _, _) = await service.GetAllMarketDataAsync(
+                "bitcoin", 3, TestContext.Current.CancellationToken);
 
             // Assert - Verify chronological order (oldest first)
             for (int i = 1; i < priceHistory.Count; i++)
@@ -97,7 +99,7 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
-        public async Task GetAllMarketDataAsync_InvalidSymbol_ThrowsException()
+        public async Task GetAllMarketDataAsync_HttpBadRequest_ThrowsProviderException()
         {
             // Arrange
             var mockResponse = new HttpResponseMessage
@@ -113,15 +115,24 @@ namespace CryptoRiskAnalysis.Tests.Services
                     ItExpr.IsAny<CancellationToken>())
                 .ReturnsAsync(mockResponse);
 
-            object cacheValue = null;
+            object? cacheValue = null;
             _mockCache.Setup(c => c.TryGetValue(It.IsAny<object>(), out cacheValue))
                 .Returns(false);
 
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act & Assert
-            await Assert.ThrowsAsync<Exception>(async () =>
-                await service.GetAllMarketDataAsync("invalid_coin", 30));
+            await Assert.ThrowsAsync<MarketDataProviderException>(() =>
+                service.GetAllMarketDataAsync("bitcoin", 30, TestContext.Current.CancellationToken));
+
+            _mockHttpHandler.Protected().Verify(
+                "SendAsync",
+                Times.Once(),
+                ItExpr.Is<HttpRequestMessage>(request =>
+                    request.RequestUri != null &&
+                    request.RequestUri.AbsolutePath == "/api/v3/klines" &&
+                    request.RequestUri.Query.Contains("symbol=BTCUSDT")),
+                ItExpr.IsAny<CancellationToken>());
         }
 
         [Fact]
@@ -134,14 +145,15 @@ namespace CryptoRiskAnalysis.Tests.Services
                 900m
             );
 
-            object cacheValue = cachedData;
+            object? cacheValue = cachedData;
             _mockCache.Setup(c => c.TryGetValue(It.IsAny<object>(), out cacheValue))
                 .Returns(true);
 
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act
-            var result = await service.GetAllMarketDataAsync("bitcoin", 30);
+            var result = await service.GetAllMarketDataAsync(
+                "bitcoin", 30, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Equal(cachedData.Item1, result.priceHistory);
@@ -178,7 +190,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             using var cache = new MemoryCache(new MemoryCacheOptions());
             var service = new BinanceSpotService(_httpClient, cache, _mockLogger.Object);
 
-            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync("bitcoin", 2);
+            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
+                "bitcoin", 2, TestContext.Current.CancellationToken);
 
             Assert.Equal(2, priceHistory.Count);
             Assert.Equal(200m, priceHistory[^1].Price);
@@ -231,6 +244,48 @@ namespace CryptoRiskAnalysis.Tests.Services
 
             await Assert.ThrowsAsync<MarketDataProviderException>(() =>
                 service.GetAllMarketDataAsync("bitcoin", 4, TestContext.Current.CancellationToken));
+        }
+
+        [Fact]
+        public async Task GetAllMarketDataAsync_ConcurrentCacheMissesShareOneProviderCall()
+        {
+            var providerCalls = 0;
+            var providerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var releaseProvider = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            _mockHttpHandler.Protected()
+                .Setup<Task<HttpResponseMessage>>(
+                    "SendAsync",
+                    ItExpr.IsAny<HttpRequestMessage>(),
+                    ItExpr.IsAny<CancellationToken>())
+                .Returns(async () =>
+                {
+                    Interlocked.Increment(ref providerCalls);
+                    providerStarted.SetResult();
+                    await releaseProvider.Task;
+                    return new HttpResponseMessage
+                    {
+                        StatusCode = HttpStatusCode.OK,
+                        Content = new StringContent(GetMockBinanceResponse())
+                    };
+                });
+
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var requestLock = new MarketDataRequestLock();
+            var firstService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock);
+            var secondService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock);
+
+            var firstRequest = firstService.GetAllMarketDataAsync(
+                "bitcoin", 3, TestContext.Current.CancellationToken);
+            await providerStarted.Task;
+            var secondRequest = secondService.GetAllMarketDataAsync(
+                "bitcoin", 3, TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, Volatile.Read(ref providerCalls));
+            releaseProvider.SetResult();
+            await Task.WhenAll(firstRequest, secondRequest);
+
+            Assert.Equal(1, providerCalls);
+            Assert.Equal(firstRequest.Result.priceHistory.Count, secondRequest.Result.priceHistory.Count);
         }
 
         [Fact]

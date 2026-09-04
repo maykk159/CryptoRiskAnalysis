@@ -1,5 +1,6 @@
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Services;
+using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.Extensions.Http.Resilience;
 using System.Threading.RateLimiting;
 
@@ -7,18 +8,27 @@ namespace CryptoRiskAnalysis.API.Extensions
 {
     public static class ServiceCollectionExtensions
     {
-        public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+        public static IServiceCollection AddApplicationServices(
+            this IServiceCollection services,
+            Action<HttpStandardResilienceOptions>? configureResilience = null)
         {
+            void ConfigureResilience(HttpStandardResilienceOptions options)
+            {
+                ConfigureMarketDataResilience(options);
+                configureResilience?.Invoke(options);
+            }
+
             // Add Memory Cache
             services.AddMemoryCache();
+            services.AddSingleton<MarketDataRequestLock>();
 
             // Retry transient failures and 429 responses up to three times with
             // exponential backoff, with per-attempt and total request timeouts.
             services.AddHttpClient<BinanceSpotService>()
-                .AddStandardResilienceHandler(ConfigureMarketDataResilience);
+                .AddStandardResilienceHandler(ConfigureResilience);
 
             services.AddHttpClient<CoinGeckoService>()
-                .AddStandardResilienceHandler(ConfigureMarketDataResilience);
+                .AddStandardResilienceHandler(ConfigureResilience);
 
             // Register HybridCryptoDataService as the single implementation of ICryptoDataService
             services.AddScoped<ICryptoDataService, HybridCryptoDataService>();
@@ -29,6 +39,13 @@ namespace CryptoRiskAnalysis.API.Extensions
             services.AddRateLimiter(options =>
             {
                 options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+                options.OnRejected = async (context, cancellationToken) =>
+                {
+                    context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+                    context.HttpContext.Response.ContentType = "application/json";
+                    var response = new ApiResponse<string>("Too many requests. Please try again later.");
+                    await context.HttpContext.Response.WriteAsJsonAsync(response, cancellationToken);
+                };
                 options.AddPolicy("RiskAnalysis", context =>
                     RateLimitPartition.GetFixedWindowLimiter(
                         partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",

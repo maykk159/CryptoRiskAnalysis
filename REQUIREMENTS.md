@@ -1,63 +1,54 @@
-# 🛠️ Project Requirements & Setup Guide
+# Project requirements and setup
 
-This document outlines the requirements to run **CryptoRiskAnalysis** on a fresh machine and provides a "One-Click" setup guide.
+## Prerequisites
 
-## ✅ Prerequisites
+| Tool | Supported version | Purpose |
+|---|---|---|
+| .NET SDK | 10.0.x | API and backend tests |
+| Node.js | 20.19+ or 22.12+ | Vite client |
+| Git | Current supported release | Source control |
 
-Before running the setup script, ensure your machine has the following tools installed:
+## Install dependencies
 
-| Tool | Version | Purpose | Download Link |
-|------|---------|---------|---------------|
-| **.NET SDK** | **10.0** or later | Backend Runtime | [Download .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| **Node.js** | **v18** or later | Frontend Runtime | [Download Node.js](https://nodejs.org/) |
-| **Git** | Latest | Version Control | [Download Git](https://git-scm.com/) |
+From the repository root:
 
----
+```powershell
+dotnet restore CryptoRiskAnalysis.API.sln
+cd client
+npm install
+cd ..
+```
 
-## 🚀 One-Click Setup (Windows)
+On Windows, `./setup.ps1` performs the dependency setup.
 
-We have provided a unified setup script to install all dependencies for you.
+## Run
 
-### Option 1: Run via PowerShell
-1.  Open **PowerShell** in the project root folder.
-2.  Run the following command:
-    ```powershell
-    .\setup.ps1
-    ```
+Terminal 1:
 
-### Option 2: Double Click
-1.  Locate `setup.ps1` in the project folder.
-2.  Right-click the file and select **Run with PowerShell**.
-
-> **What this script does:**
-> 1.  Checks if `.NET 10` and `Node.js` are installed.
-> 2.  Restores NuGet packages for the API.
-> 3.  Installs npm packages for the React Client.
-
----
-
-## 🏃‍♂️ Running the Application
-
-After setup is complete, use these commands to start the servers:
-
-### Terminal 1 - Backend (API)
 ```powershell
 cd CryptoRiskAnalysis.API
 dotnet run
 ```
-_Runs on: http://localhost:5058_
 
-### Terminal 2 - Frontend (UI)
+Terminal 2:
+
 ```powershell
 cd client
 npm run dev
 ```
-_Open in browser: http://localhost:5173_
 
----
+- API: `http://localhost:5058`
+- Client: `http://localhost:5173`
 
-## 🐳 Docker Support (Optional)
+## Verify
 
-If you prefer using Docker, you can ignore the prerequisites above (except Docker Desktop).
+```powershell
+dotnet build CryptoRiskAnalysis.API.sln -c Release -warnaserror
+dotnet test CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj -c Release --no-build
+cd client
+npm run lint
+npm test
+npm run build
+```
 
-*(Docker configuration coming soon)*
+This repository currently has no Dockerfile or Compose configuration. Use the local .NET and Node.js workflow above.

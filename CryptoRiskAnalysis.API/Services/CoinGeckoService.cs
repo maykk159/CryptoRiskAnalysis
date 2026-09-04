@@ -12,14 +12,20 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly HttpClient _httpClient;
         private readonly IMemoryCache _cache;
         private readonly ILogger<CoinGeckoService> _logger;
+        private readonly MarketDataRequestLock _requestLock;
         private const string BaseUrl = "https://api.coingecko.com/api/v3";
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
-        public CoinGeckoService(HttpClient httpClient, IMemoryCache cache, ILogger<CoinGeckoService> logger)
+        public CoinGeckoService(
+            HttpClient httpClient,
+            IMemoryCache cache,
+            ILogger<CoinGeckoService> logger,
+            MarketDataRequestLock? requestLock = null)
         {
             _httpClient = httpClient;
             _cache = cache;
             _logger = logger;
+            _requestLock = requestLock ?? new MarketDataRequestLock();
         }
 
         /// <summary>
@@ -42,6 +48,13 @@ namespace CryptoRiskAnalysis.API.Services
             if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal) cachedData))
             {
                 _logger.LogDebug("CoinGecko Cache HIT for {AssetId}", assetId);
+                return cachedData;
+            }
+
+            using var requestLease = await _requestLock.AcquireAsync(cacheKey, cancellationToken);
+            if (_cache.TryGetValue(cacheKey, out cachedData))
+            {
+                _logger.LogDebug("CoinGecko Cache HIT after waiting for {AssetId}", assetId);
                 return cachedData;
             }
 
