@@ -71,10 +71,18 @@ namespace CryptoRiskAnalysis.API.Services
                     throw new MarketDataProviderException("Binance", response.StatusCode);
 
                 var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var klines = JsonSerializer.Deserialize<List<List<JsonElement>>>(content);
+                List<List<JsonElement>>? klines;
+                try
+                {
+                    klines = JsonSerializer.Deserialize<List<List<JsonElement>>>(content);
+                }
+                catch (JsonException ex)
+                {
+                    throw new MarketDataProviderException("Binance", "response was not valid JSON.", ex);
+                }
 
                 if (klines == null || klines.Count == 0)
-                    throw new Exception($"No kline data returned for {symbol}");
+                    throw new MarketDataProviderException("Binance", $"no kline data was returned for {symbol}.");
 
                 // Binance kline index 6 is the candle close time. Exclude the currently open
                 // daily candle so a partial day cannot distort volatility and trend metrics.
@@ -87,26 +95,35 @@ namespace CryptoRiskAnalysis.API.Services
                     .ToList();
 
                 if (completedKlines.Count == 0)
-                    throw new Exception($"No completed kline data returned for {symbol}");
+                    throw new MarketDataProviderException("Binance", $"no completed kline data was returned for {symbol}.");
 
                 // 5. Parse klines into PriceData
                 // Binance returns: [timestamp(number), open(string), high(string), low(string), close(string), volume(string), ...]
-                var priceHistory = completedKlines.Select(k => new PriceData
+                List<PriceData> priceHistory;
+                List<decimal> volumes;
+                try
                 {
-                    // Timestamp is a number
-                    Timestamp = ReadInt64(k[0]),
-                    // Close price is index 4 — use InvariantCulture to handle decimal points correctly
-                    Price = k[4].ValueKind == JsonValueKind.String
-                        ? decimal.Parse(k[4].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                        : k[4].GetDecimal()
-                }).OrderBy(p => p.Timestamp).ToList();
+                    priceHistory = completedKlines.Select(k => new PriceData
+                    {
+                        // Timestamp is a number
+                        Timestamp = ReadInt64(k[0]),
+                        // Close price is index 4 — use InvariantCulture to handle decimal points correctly
+                        Price = k[4].ValueKind == JsonValueKind.String
+                            ? decimal.Parse(k[4].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                            : k[4].GetDecimal()
+                    }).OrderBy(p => p.Timestamp).ToList();
 
-                // 6. Calculate volume metrics from the same completed daily candles.
-                var volumes = completedKlines.Select(k =>
-                    k[5].ValueKind == JsonValueKind.String
-                        ? decimal.Parse(k[5].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                        : k[5].GetDecimal()
-                ).ToList();
+                    // 6. Calculate volume metrics from the same completed daily candles.
+                    volumes = completedKlines.Select(k =>
+                        k[5].ValueKind == JsonValueKind.String
+                            ? decimal.Parse(k[5].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                            : k[5].GetDecimal()
+                    ).ToList();
+                }
+                catch (Exception ex) when (ex is FormatException or InvalidOperationException or OverflowException)
+                {
+                    throw new MarketDataProviderException("Binance", "a kline contained an invalid price, volume, or timestamp.", ex);
+                }
 
                 decimal currentVolume;
                 decimal avgVolume;

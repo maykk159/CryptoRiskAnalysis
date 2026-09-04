@@ -29,5 +29,10 @@ namespace CryptoRiskAnalysis.API.Exceptions
             : base($"{provider} could not be reached.", innerException)
         {
         }
+
+        public MarketDataProviderException(string provider, string reason, Exception? innerException = null)
+            : base($"{provider} returned invalid market data: {reason}", innerException)
+        {
+        }
     }
 }

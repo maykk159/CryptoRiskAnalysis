@@ -68,7 +68,15 @@ namespace CryptoRiskAnalysis.API.Services
                     throw new MarketDataProviderException("CoinGecko", response.StatusCode);
 
                 var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                var data = JsonSerializer.Deserialize<CoinGeckoMarketChart>(content, JsonOptions);
+                CoinGeckoMarketChart? data;
+                try
+                {
+                    data = JsonSerializer.Deserialize<CoinGeckoMarketChart>(content, JsonOptions);
+                }
+                catch (JsonException ex)
+                {
+                    throw new MarketDataProviderException("CoinGecko", "response was not valid JSON.", ex);
+                }
 
                 if (data?.Prices == null || data.Total_Volumes == null)
                 {

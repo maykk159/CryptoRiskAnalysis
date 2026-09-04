@@ -67,16 +67,7 @@ const ScoreBar: React.FC<{
   icon: React.ReactNode;
   delayMs?: number;
 }> = ({ label, description, score, colorKey, icon, delayMs = 0 }) => {
-  const [animatedWidth, setAnimatedWidth] = React.useState(0);
   const animatedScore = useAnimatedNumber(score, 2000, delayMs);
-
-  React.useEffect(() => {
-    setAnimatedWidth(0);
-    const timer = setTimeout(() => {
-      setAnimatedWidth(score);
-    }, 50 + delayMs);
-    return () => clearTimeout(timer);
-  }, [score, delayMs]);
 
   const getLevelText = (s: number) => {
     if (s < 30) return 'Low';
@@ -105,7 +96,7 @@ const ScoreBar: React.FC<{
         <div className="w-full bg-gray-700/50 rounded-full h-3">
           <div
             className={clsx('h-3 rounded-full relative transition-all duration-[2000ms] ease-out', theme.barFill)}
-            style={{ width: `${Math.min(100, Math.max(0, animatedWidth))}%` }}
+            style={{ width: `${Math.min(100, Math.max(0, animatedScore))}%` }}
           >
             <div className={clsx('absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full shadow-md', theme.barThumb)} />
           </div>
