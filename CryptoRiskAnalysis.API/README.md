@@ -78,7 +78,17 @@ Provider quotas are not stated as fixed numbers here because they depend on endp
 | `504` | Provider request timed out |
 | `500` | Unexpected application error |
 
-The application rate limit is 30 requests per minute per remote IP. Its `429` response uses the same JSON envelope.
+The application rate limit is 30 requests per minute per resolved client IP. Its `429` response uses the same JSON envelope. When the API runs behind a reverse proxy, configure each trusted proxy address or CIDR range under `ReverseProxy`; forwarded headers from any other source are ignored.
+
+```json
+"ReverseProxy": {
+  "ForwardLimit": 1,
+  "KnownProxies": ["10.0.0.100"],
+  "KnownNetworks": ["10.1.0.0/16"]
+}
+```
+
+The same values can be supplied through environment variables such as `ReverseProxy__KnownProxies__0`. Never trust all proxy sources on a publicly reachable deployment.
 
 ## Local configuration
 

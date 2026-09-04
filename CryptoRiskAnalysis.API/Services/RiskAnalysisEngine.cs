@@ -15,22 +15,22 @@ namespace CryptoRiskAnalysis.API.Services
         private const decimal EXTREME_MOMENTUM_THRESHOLD = 0.30m;  // 30% movement
         private const decimal SIGNIFICANT_MOMENTUM_THRESHOLD = 0.15m;  // 15% movement
         private const decimal MODERATE_MOMENTUM_THRESHOLD = 0.05m;  // 5% movement
-        
+
         private const decimal EXTREME_MOMENTUM_BASE_SCORE = 80m;
         private const decimal SIGNIFICANT_MOMENTUM_BASE_SCORE = 50m;
         private const decimal MODERATE_MOMENTUM_BASE_SCORE = 20m;
-        
+
         private const decimal EXTREME_MOMENTUM_MULTIPLIER = 200m;
         private const decimal SIGNIFICANT_MOMENTUM_MULTIPLIER = 200m;
         private const decimal MODERATE_MOMENTUM_MULTIPLIER = 300m;
         private const decimal STABLE_MOMENTUM_MULTIPLIER = 400m;
-        
+
         private const decimal VOLATILITY_MODERATE_THRESHOLD = 0.5m;  // 50% annual volatility
         private const decimal VOLATILITY_HIGH_THRESHOLD = 1.0m;  // 100% annual volatility
-        
+
         private const decimal HIGH_RISK_THRESHOLD = 70m;
         private const decimal LOW_RISK_THRESHOLD = 30m;
-        
+
         private const int CRYPTO_TRADING_DAYS_PER_YEAR = 365;  // Crypto trades 24/7
         private const int SHORT_TERM_DAYS = 7;
         private const int MINIMUM_DATA_POINTS = 7;
@@ -46,16 +46,16 @@ namespace CryptoRiskAnalysis.API.Services
                     nameof(priceHistory));
 
             var prices = priceHistory.Select(p => p.Price).ToList();
-            
+
             // Calculate log returns (more mathematically sound)
             var returns = CalculateLogReturns(prices);
-            
+
             // ✅ IMPROVED: Financial-grade risk calculations
             var volatilityScore = CalculateVolatilityScore(returns);
             var trendScore = CalculateTrendScore(prices);
             var volumeScore = CalculateVolumeScore(prices, currentVolume, averageVolume);
             var compositeScore = CalculateCompositeScore(volatilityScore, trendScore, volumeScore);
-            
+
             // ✨ NEW: Advanced financial metrics
             var downsideRisk = CalculateDownsideRisk(returns);
             var maxDrawdown = CalculateMaximumDrawdown(prices);
@@ -67,7 +67,7 @@ namespace CryptoRiskAnalysis.API.Services
             _logger.LogDebug(
                 "Risk scores — Volatility: {VScore:F2}, Trend: {TScore:F2}, Volume: {VolScore:F2}, Composite: {CScore:F2}",
                 volatilityScore, trendScore, volumeScore, compositeScore);
-            
+
             return new RiskScoreResult
             {
                 VolatilityScore = Math.Round(volatilityScore, 2),
@@ -156,7 +156,7 @@ namespace CryptoRiskAnalysis.API.Services
             // For 30 days: compare last 7 days vs all 30 days
             // For 90 days: compare last 7 days vs all 90 days
             int shortTermDays = prices.Count >= 30 ? SHORT_TERM_DAYS : Math.Max(3, prices.Count / 3);
-            
+
             var recentDays = prices.Skip(Math.Max(0, prices.Count - shortTermDays)).ToList();
             var avgRecent = recentDays.Average();
             var avgLongTerm = prices.Average();
@@ -204,7 +204,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (averageVolume == 0) return 50m; // No volume data
 
             var volumeRatio = currentVolume / averageVolume;
-            
+
             // Calculate recent price change for context
             decimal priceChange = 0;
             if (prices.Count >= 7)
@@ -217,7 +217,7 @@ namespace CryptoRiskAnalysis.API.Services
             decimal score = 40m; // Base score
 
             // Context-aware volume analysis
-            
+
             // 1. Selling pressure: Declining price + High volume = PANIC
             if (priceChange < -0.05m && volumeRatio > 1.5m)
             {
@@ -271,7 +271,7 @@ namespace CryptoRiskAnalysis.API.Services
             decimal volumeWeight = 0.30m;
 
             // ✅ ADAPTIVE WEIGHTING based on market conditions
-            
+
             // When volatility is extreme, it dominates
             if (volatilityScore > HIGH_RISK_THRESHOLD)
             {
@@ -295,12 +295,12 @@ namespace CryptoRiskAnalysis.API.Services
             }
 
             // Weighted average
-            var composite = (volatilityScore * volWeight) 
-                          + (trendScore * trendWeight) 
+            var composite = (volatilityScore * volWeight)
+                          + (trendScore * trendWeight)
                           + (volumeScore * volumeWeight);
 
             // ✅ RISK AMPLIFICATION: Multiple high risks compound
-            
+
             // All three high = systemic risk
             if (volatilityScore > HIGH_RISK_THRESHOLD && trendScore > HIGH_RISK_THRESHOLD && volumeScore > HIGH_RISK_THRESHOLD)
             {
@@ -399,7 +399,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (returns.Count < 5) return 0m; // Need at least 5 data points
 
             var sortedReturns = returns.OrderBy(r => r).ToList();
-            
+
             // For small datasets (< 20 points), use worst return instead of percentile
             // For larger datasets, use 5th percentile (95% confidence - worst 5%)
             double var95;

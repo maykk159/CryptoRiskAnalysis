@@ -93,10 +93,10 @@ npm install
 cd ..
 ```
 
-On Windows, `setup.ps1` performs the same dependency setup:
+On Windows, `setup.cmd` performs the same dependency setup without requiring a persistent PowerShell execution-policy change:
 
 ```powershell
-.\setup.ps1
+.\setup.cmd
 ```
 
 ### 3. Start the API
@@ -122,6 +122,8 @@ npm run dev
 ```
 
 Open [http://localhost:5173](http://localhost:5173). The API CORS policy accepts the local Vite origins on ports `5173` and `5174`.
+
+If Windows PowerShell blocks `npm.ps1` through its execution policy, run `npm.cmd run dev`. This invokes the same npm CLI without requiring an execution-policy change.
 
 ## Configuration
 
@@ -273,6 +275,7 @@ CryptoRiskAnalysis/
 Local development intentionally uses HTTP and permits the local Vite origins. Before deploying publicly:
 
 - configure a Kestrel HTTPS certificate or terminate TLS at a trusted reverse proxy (production HTTP requests are redirected to HTTPS port 443);
+- list every trusted reverse proxy IP or CIDR range in the `ReverseProxy` configuration so rate limiting uses the originating client IP;
 - replace the local CORS origins with the deployed frontend origin;
 - run with `ASPNETCORE_ENVIRONMENT=Production` so internal exception details are hidden;
 - review rate limits and caching for the expected traffic profile;

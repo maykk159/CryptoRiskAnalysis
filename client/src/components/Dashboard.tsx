@@ -23,13 +23,13 @@ export const Dashboard: React.FC = () => {
 
   // Type-safe error message — no more catch (err: any)
   const errorMessage = !data && error ? getErrorMessage(error, selectedAsset.name) : null;
-  const refetchErrorMessage = data && isRefetchError && error
-    ? getErrorMessage(error, selectedAsset.name)
-    : null;
+  const refetchErrorMessage =
+    data && isRefetchError && error ? getErrorMessage(error, selectedAsset.name) : null;
 
-  const latestPrice = data?.priceHistory && data.priceHistory.length > 0
-    ? data.priceHistory[data.priceHistory.length - 1].price
-    : undefined;
+  const latestPrice =
+    data?.priceHistory && data.priceHistory.length > 0
+      ? data.priceHistory[data.priceHistory.length - 1].price
+      : undefined;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
@@ -40,9 +40,7 @@ export const Dashboard: React.FC = () => {
               CIPHER
             </span>
             <span className="hidden sm:inline text-gray-700 font-light text-2xl">|</span>
-            <span className="text-gray-400 font-light text-2xl">
-              Crypto Risk Intelligence
-            </span>
+            <span className="text-gray-400 font-light text-2xl">Crypto Risk Intelligence</span>
           </h1>
           <p className="text-gray-400 mt-2 text-sm sm:text-base">
             Advanced quantitative financial risk assessment tool for crypto assets
@@ -50,10 +48,7 @@ export const Dashboard: React.FC = () => {
         </header>
 
         {/* Asset Selector */}
-        <AssetSelector
-          selectedAsset={selectedAssetId}
-          onSelectAsset={setSelectedAssetId}
-        />
+        <AssetSelector selectedAsset={selectedAssetId} onSelectAsset={setSelectedAssetId} />
 
         {/* Time Range Selector */}
         <TimeRangeSelector value={selectedTimeRange} onChange={setSelectedTimeRange} />
@@ -66,7 +61,10 @@ export const Dashboard: React.FC = () => {
             aria-live="polite"
             aria-atomic="true"
           >
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500" aria-hidden="true" />
+            <div
+              className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"
+              aria-hidden="true"
+            />
             <span className="sr-only">Loading risk analysis for {selectedAsset.name}.</span>
           </div>
         )}

@@ -9,11 +9,7 @@ describe('getErrorMessage', () => {
   });
 
   it('keeps status-aware API messages', () => {
-    expect(getErrorMessage(new ApiRequestError('missing', 404), 'Bitcoin')).toContain(
-      'Bitcoin'
-    );
-    expect(getErrorMessage(new ApiRequestError('limited', 429))).toContain(
-      'rate limit'
-    );
+    expect(getErrorMessage(new ApiRequestError('missing', 404), 'Bitcoin')).toContain('Bitcoin');
+    expect(getErrorMessage(new ApiRequestError('limited', 429))).toContain('rate limit');
   });
 });

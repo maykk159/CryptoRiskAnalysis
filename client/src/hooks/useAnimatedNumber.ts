@@ -43,15 +43,18 @@ export function useAnimatedNumber(
       }
     };
 
-    const timeoutId = window.setTimeout(() => {
-      if (shouldSkipAnimation) {
-        valueRef.current = target;
-        setValue(target);
-        return;
-      }
+    const timeoutId = window.setTimeout(
+      () => {
+        if (shouldSkipAnimation) {
+          valueRef.current = target;
+          setValue(target);
+          return;
+        }
 
-      animationFrameId = requestAnimationFrame(animate);
-    }, shouldSkipAnimation ? 0 : delay);
+        animationFrameId = requestAnimationFrame(animate);
+      },
+      shouldSkipAnimation ? 0 : delay
+    );
 
     return () => {
       clearTimeout(timeoutId);

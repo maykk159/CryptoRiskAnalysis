@@ -15,6 +15,7 @@ builder.Services.AddControllers();
 
 // Configure Services using Extension Method
 builder.Services.AddApplicationServices();
+builder.Services.AddForwardedHeadersConfiguration(builder.Configuration);
 
 // Configure CORS
 builder.Services.AddCorsConfiguration();
@@ -34,6 +35,11 @@ builder.Services.AddHttpsRedirection(options =>
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+// Resolve the original client IP and scheme before HTTPS redirects and rate limiting.
+// Only proxies/networks explicitly trusted in configuration (plus loopback defaults)
+// are allowed to supply these values.
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();

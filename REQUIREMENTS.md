@@ -15,11 +15,17 @@ From the repository root:
 ```powershell
 dotnet restore CryptoRiskAnalysis.API.sln
 cd client
-npm install
+npm.cmd install
 cd ..
 ```
 
-On Windows, `./setup.ps1` performs the dependency setup.
+On Windows, run the wrapper below. It applies an execution-policy bypass only to the setup process and does not change the machine or user policy:
+
+```powershell
+.\setup.cmd
+```
+
+If local PowerShell scripts are already allowed, `./setup.ps1` performs the same setup directly.
 
 ## Run
 
@@ -34,7 +40,7 @@ Terminal 2:
 
 ```powershell
 cd client
-npm run dev
+npm.cmd run dev
 ```
 
 - API: `http://localhost:5058`
@@ -46,9 +52,9 @@ npm run dev
 dotnet build CryptoRiskAnalysis.API.sln -c Release -warnaserror
 dotnet test CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj -c Release --no-build
 cd client
-npm run lint
-npm test
-npm run build
+npm.cmd run lint
+npm.cmd test
+npm.cmd run build
 ```
 
 This repository currently has no Dockerfile or Compose configuration. Use the local .NET and Node.js workflow above.

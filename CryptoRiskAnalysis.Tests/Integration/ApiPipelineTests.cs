@@ -7,8 +7,10 @@ using CryptoRiskAnalysis.API.Services;
 using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -106,6 +108,82 @@ public class ApiPipelineTests
         Assert.Contains("Too many requests", payload.Message);
     }
 
+    [Fact]
+    public async Task RateLimitMiddleware_UsesForwardedClientIpFromTrustedProxy()
+    {
+        var proxyAddress = IPAddress.Parse("10.0.0.10");
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ReverseProxy:KnownProxies:0"] = proxyAddress.ToString()
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddApplicationServices();
+        services.AddForwardedHeadersConfiguration(configuration);
+        await using var provider = services.BuildServiceProvider();
+        var endpoint = new Endpoint(
+            _ => Task.CompletedTask,
+            new EndpointMetadataCollection(new EnableRateLimitingAttribute("RiskAnalysis")),
+            "proxied-risk-analysis-test-endpoint");
+        var application = new ApplicationBuilder(provider);
+        application.UseForwardedHeaders();
+        application.UseRateLimiter();
+        application.Run(context => context.Response.WriteAsync("accepted"));
+        var pipeline = application.Build();
+
+        for (var requestNumber = 1; requestNumber <= 30; requestNumber++)
+        {
+            var firstClientContext = CreateProxiedHttpContext(
+                provider,
+                endpoint,
+                proxyAddress,
+                "198.51.100.10");
+            await pipeline(firstClientContext);
+            Assert.Equal(StatusCodes.Status200OK, firstClientContext.Response.StatusCode);
+        }
+
+        var secondClientContext = CreateProxiedHttpContext(
+            provider,
+            endpoint,
+            proxyAddress,
+            "198.51.100.11");
+        await pipeline(secondClientContext);
+
+        Assert.Equal(StatusCodes.Status200OK, secondClientContext.Response.StatusCode);
+        Assert.Equal(IPAddress.Parse("198.51.100.11"), secondClientContext.Connection.RemoteIpAddress);
+    }
+
+    [Fact]
+    public async Task ForwardedHeadersMiddleware_IgnoresUntrustedProxy()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ReverseProxy:KnownProxies:0"] = "10.0.0.10"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddForwardedHeadersConfiguration(configuration);
+        await using var provider = services.BuildServiceProvider();
+        var application = new ApplicationBuilder(provider);
+        application.UseForwardedHeaders();
+        application.Run(_ => Task.CompletedTask);
+        var pipeline = application.Build();
+        var untrustedProxyAddress = IPAddress.Parse("10.0.0.20");
+        var context = CreateProxiedHttpContext(
+            provider,
+            endpoint: null,
+            untrustedProxyAddress,
+            "198.51.100.99");
+
+        await pipeline(context);
+
+        Assert.Equal(untrustedProxyAddress, context.Connection.RemoteIpAddress);
+    }
+
     private static ServiceProvider CreateMiddlewareServices(string environmentName)
     {
         var services = new ServiceCollection();
@@ -131,6 +209,19 @@ public class ApiPipelineTests
             context.SetEndpoint(endpoint);
         }
 
+        return context;
+    }
+
+    private static DefaultHttpContext CreateProxiedHttpContext(
+        IServiceProvider provider,
+        Endpoint? endpoint,
+        IPAddress proxyAddress,
+        string forwardedClientAddress)
+    {
+        var context = CreateHttpContext(provider, endpoint);
+        context.Connection.RemoteIpAddress = proxyAddress;
+        context.Request.Headers["X-Forwarded-For"] = forwardedClientAddress;
+        context.Request.Headers["X-Forwarded-Proto"] = "https";
         return context;
     }
 

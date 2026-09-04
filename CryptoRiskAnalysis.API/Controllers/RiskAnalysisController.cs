@@ -17,7 +17,7 @@ namespace CryptoRiskAnalysis.API.Controllers
         private readonly ILogger<RiskAnalysisController> _logger;
 
         public RiskAnalysisController(
-            ICryptoDataService cryptoDataService, 
+            ICryptoDataService cryptoDataService,
             IRiskEngine riskEngine,
             ILogger<RiskAnalysisController> logger)
         {
@@ -28,7 +28,7 @@ namespace CryptoRiskAnalysis.API.Controllers
 
         [HttpGet("{assetId}")]
         public async Task<ActionResult<ApiResponse<RiskAnalysisResponseDto>>> GetRiskAnalysis(
-            string assetId, 
+            string assetId,
             [FromQuery] int days = 30,
             CancellationToken cancellationToken = default)
         {
@@ -46,7 +46,7 @@ namespace CryptoRiskAnalysis.API.Controllers
                 assetId,
                 days,
                 cancellationToken);
-            
+
             if (priceHistory == null || !priceHistory.Any())
             {
                 _logger.LogWarning("No data found for asset: {AssetId}", assetId);
@@ -71,7 +71,7 @@ namespace CryptoRiskAnalysis.API.Controllers
             // 3. Map to DTO
             var responseDto = new RiskAnalysisResponseDto(assetId, riskResult);
 
-            _logger.LogInformation("Successfully calculated risk for {AssetId}: Score {Score}. returning {Count} history points.", 
+            _logger.LogInformation("Successfully calculated risk for {AssetId}: Score {Score}. returning {Count} history points.",
                 assetId, riskResult.CompositeRiskScore, responseDto.PriceHistory.Count);
 
             return Ok(new ApiResponse<RiskAnalysisResponseDto>(responseDto));

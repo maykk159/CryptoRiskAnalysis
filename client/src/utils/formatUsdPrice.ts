@@ -12,9 +12,10 @@ export const formatUsdPrice = (value: number) => {
     })}`;
   }
 
-  const maximumFractionDigits = absoluteValue > 0 && absoluteValue < 1
-    ? Math.min(20, Math.max(3, 5 - Math.floor(Math.log10(absoluteValue))))
-    : 3;
+  const maximumFractionDigits =
+    absoluteValue > 0 && absoluteValue < 1
+      ? Math.min(20, Math.max(3, 5 - Math.floor(Math.log10(absoluteValue))))
+      : 3;
 
   return `$${value.toLocaleString('en-US', { maximumFractionDigits })}`;
 };

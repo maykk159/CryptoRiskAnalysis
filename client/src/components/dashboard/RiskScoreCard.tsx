@@ -12,16 +12,54 @@ const RiskGauge = React.memo(function RiskGauge({ score }: { score: number }) {
 
   return (
     <div className="relative w-36 h-20 flex items-end justify-center">
-      <svg viewBox="0 0 100 55" className="absolute bottom-0 w-full h-full overflow-visible drop-shadow-md">
+      <svg
+        viewBox="0 0 100 55"
+        className="absolute bottom-0 w-full h-full overflow-visible drop-shadow-md"
+      >
         {/* Track Background */}
         <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#374151" strokeWidth="10" />
 
         {/* 5 Colored Segments */}
-        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#22c55e" strokeWidth="10" strokeDasharray="23.5 105" strokeDashoffset="0" />
-        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#a3e635" strokeWidth="10" strokeDasharray="23.5 105" strokeDashoffset="-25.54" />
-        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#facc15" strokeWidth="10" strokeDasharray="23.5 105" strokeDashoffset="-51.08" />
-        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#fb923c" strokeWidth="10" strokeDasharray="23.5 105" strokeDashoffset="-76.62" />
-        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#ef4444" strokeWidth="10" strokeDasharray="23.5 105" strokeDashoffset="-102.16" />
+        <path
+          d="M 10 50 A 40 40 0 0 1 90 50"
+          fill="none"
+          stroke="#22c55e"
+          strokeWidth="10"
+          strokeDasharray="23.5 105"
+          strokeDashoffset="0"
+        />
+        <path
+          d="M 10 50 A 40 40 0 0 1 90 50"
+          fill="none"
+          stroke="#a3e635"
+          strokeWidth="10"
+          strokeDasharray="23.5 105"
+          strokeDashoffset="-25.54"
+        />
+        <path
+          d="M 10 50 A 40 40 0 0 1 90 50"
+          fill="none"
+          stroke="#facc15"
+          strokeWidth="10"
+          strokeDasharray="23.5 105"
+          strokeDashoffset="-51.08"
+        />
+        <path
+          d="M 10 50 A 40 40 0 0 1 90 50"
+          fill="none"
+          stroke="#fb923c"
+          strokeWidth="10"
+          strokeDasharray="23.5 105"
+          strokeDashoffset="-76.62"
+        />
+        <path
+          d="M 10 50 A 40 40 0 0 1 90 50"
+          fill="none"
+          stroke="#ef4444"
+          strokeWidth="10"
+          strokeDasharray="23.5 105"
+          strokeDashoffset="-102.16"
+        />
 
         {/* Needle */}
         <g style={{ transform: `rotate(${rotation}deg)`, transformOrigin: '50px 50px' }}>
@@ -74,7 +112,11 @@ const AssetIcon: React.FC<{ asset: Asset }> = ({ asset }) => {
   );
 };
 
-const AnimatedCompositeScore = React.memo(function AnimatedCompositeScore({ score }: { score: number }) {
+const AnimatedCompositeScore = React.memo(function AnimatedCompositeScore({
+  score,
+}: {
+  score: number;
+}) {
   const animatedScore = useAnimatedNumber(score, 700);
   return <>{animatedScore.toFixed(1)}</>;
 });
@@ -82,9 +124,27 @@ const AnimatedCompositeScore = React.memo(function AnimatedCompositeScore({ scor
 // ─── ScoreBar ────────────────────────────────────────────────────────────────
 
 const colorClasses = {
-  purple: { iconBg: 'bg-purple-500/20', iconText: 'text-purple-400', barFill: 'bg-purple-500', barThumb: 'bg-purple-400', text: 'text-purple-400' },
-  blue:   { iconBg: 'bg-blue-500/20',   iconText: 'text-blue-400',   barFill: 'bg-blue-500',   barThumb: 'bg-blue-400',   text: 'text-blue-400' },
-  orange: { iconBg: 'bg-orange-500/20', iconText: 'text-orange-400', barFill: 'bg-orange-500', barThumb: 'bg-orange-400', text: 'text-orange-400' },
+  purple: {
+    iconBg: 'bg-purple-500/20',
+    iconText: 'text-purple-400',
+    barFill: 'bg-purple-500',
+    barThumb: 'bg-purple-400',
+    text: 'text-purple-400',
+  },
+  blue: {
+    iconBg: 'bg-blue-500/20',
+    iconText: 'text-blue-400',
+    barFill: 'bg-blue-500',
+    barThumb: 'bg-blue-400',
+    text: 'text-blue-400',
+  },
+  orange: {
+    iconBg: 'bg-orange-500/20',
+    iconText: 'text-orange-400',
+    barFill: 'bg-orange-500',
+    barThumb: 'bg-orange-400',
+    text: 'text-orange-400',
+  },
 };
 
 const ScoreBar = React.memo(function ScoreBar({
@@ -133,15 +193,28 @@ const ScoreBar = React.memo(function ScoreBar({
             className={clsx('h-3 rounded-full relative', theme.barFill)}
             style={{ width: `${Math.min(100, Math.max(0, animatedScore))}%` }}
           >
-            <div className={clsx('absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full shadow-md', theme.barThumb)} />
+            <div
+              className={clsx(
+                'absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full shadow-md',
+                theme.barThumb
+              )}
+            />
           </div>
         </div>
       </div>
 
       {/* Score & Badge */}
       <div className="text-right shrink-0 min-w-[58px] sm:min-w-[70px] flex flex-col items-end gap-1.5">
-        <span className={clsx('text-xl sm:text-2xl font-bold leading-none', theme.text)}>{animatedScore.toFixed(1)}</span>
-        <span className={clsx('text-xs font-semibold px-2 sm:px-3 py-1 rounded-full', theme.iconBg, theme.text)}>
+        <span className={clsx('text-xl sm:text-2xl font-bold leading-none', theme.text)}>
+          {animatedScore.toFixed(1)}
+        </span>
+        <span
+          className={clsx(
+            'text-xs font-semibold px-2 sm:px-3 py-1 rounded-full',
+            theme.iconBg,
+            theme.text
+          )}
+        >
           {levelText}
         </span>
       </div>
@@ -153,9 +226,10 @@ const ScoreBar = React.memo(function ScoreBar({
 
 export const RiskScoreCard: React.FC<RiskScoreCardProps> = ({ data, asset, currentPrice }) => {
   const getRiskLevel = (score: number) => {
-    if (score < 30) return { text: 'Low Risk',    color: 'text-green-400',  bgColor: 'bg-green-400' };
-    if (score < 70) return { text: 'Medium Risk', color: 'text-yellow-400', bgColor: 'bg-yellow-400' };
-    return             { text: 'High Risk',   color: 'text-red-400',    bgColor: 'bg-red-400' };
+    if (score < 30) return { text: 'Low Risk', color: 'text-green-400', bgColor: 'bg-green-400' };
+    if (score < 70)
+      return { text: 'Medium Risk', color: 'text-yellow-400', bgColor: 'bg-yellow-400' };
+    return { text: 'High Risk', color: 'text-red-400', bgColor: 'bg-red-400' };
   };
 
   const riskLevel = getRiskLevel(data.compositeRiskScore);
@@ -173,7 +247,11 @@ export const RiskScoreCard: React.FC<RiskScoreCardProps> = ({ data, asset, curre
           {asset && <span className="text-gray-400 text-lg">({asset.ticker})</span>}
           {currentPrice !== undefined && currentPrice !== null && (
             <span className="sm:ml-3 max-w-full px-3 py-1 text-sm sm:text-base font-bold bg-emerald-950/40 text-emerald-400 border border-emerald-500/25 rounded-xl font-mono tracking-tight shadow-inner break-all">
-              ${currentPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}
+              $
+              {currentPrice.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 8,
+              })}
             </span>
           )}
         </h2>
@@ -192,7 +270,9 @@ export const RiskScoreCard: React.FC<RiskScoreCardProps> = ({ data, asset, curre
         </div>
 
         <div className="w-full sm:w-1/3 flex justify-start sm:justify-end">
-          <div className={`text-base sm:text-lg font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full whitespace-nowrap ${riskLevel.color.replace('text-', 'bg-')} bg-opacity-20`}>
+          <div
+            className={`text-base sm:text-lg font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full whitespace-nowrap ${riskLevel.color.replace('text-', 'bg-')} bg-opacity-20`}
+          >
             {riskLevel.text}
           </div>
         </div>
