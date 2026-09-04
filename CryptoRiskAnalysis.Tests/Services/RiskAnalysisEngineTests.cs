@@ -64,7 +64,7 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
-        public void CalculateRisk_WithInsufficientData_ReturnsDefaultScore()
+        public void CalculateRisk_WithInsufficientData_RejectsAnalysis()
         {
             // Arrange - Only 2 data points (insufficient)
             var priceHistory = new List<PriceData>
@@ -73,12 +73,8 @@ namespace CryptoRiskAnalysis.Tests.Services
                 new PriceData { Timestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(), Price = 105m }
             };
 
-            // Act
-            var result = _engine.CalculateRisk(priceHistory, 1000m, 1000m);
-
-            // Assert - Should return neutral/default scores
-            Assert.Equal(50m, result.TrendScore); // Default trend score
-            Assert.Equal(0m, result.DownsideRisk); // Insufficient data
+            Assert.Throws<ArgumentException>(() =>
+                _engine.CalculateRisk(priceHistory, 1000m, 1000m));
         }
 
         [Theory]
@@ -115,9 +111,9 @@ namespace CryptoRiskAnalysis.Tests.Services
         [Fact]
         public void CalculateDownsideRisk_UsesZeroTargetAndAllReturnPeriods()
         {
-            // Arrange - Two downside periods and two periods above the 0% target.
-            // Standard downside deviation keeps all four periods in the denominator.
-            var logReturns = new[] { -0.10, 0.05, -0.20, 0.10 };
+            // Arrange - Two downside periods and four periods above the 0% target.
+            // Standard downside deviation keeps all six periods in the denominator.
+            var logReturns = new[] { -0.10, 0.05, -0.20, 0.10, 0.03, 0.02 };
             var priceHistory = new List<PriceData>();
             var price = 100d;
             priceHistory.Add(new PriceData { Timestamp = 1000, Price = (decimal)price });
@@ -197,7 +193,9 @@ namespace CryptoRiskAnalysis.Tests.Services
                 new PriceData { Timestamp = 2000, Price = 120m }, // Peak
                 new PriceData { Timestamp = 3000, Price = 110m },
                 new PriceData { Timestamp = 4000, Price = 90m },  // Drop to 90 from 120 = -25%
-                new PriceData { Timestamp = 5000, Price = 95m }
+                new PriceData { Timestamp = 5000, Price = 95m },
+                new PriceData { Timestamp = 6000, Price = 100m },
+                new PriceData { Timestamp = 7000, Price = 105m }
             };
 
             // Act

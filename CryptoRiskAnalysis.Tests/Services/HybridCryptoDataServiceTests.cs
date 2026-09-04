@@ -33,6 +33,39 @@ namespace CryptoRiskAnalysis.Tests.Services
         }
 
         [Fact]
+        public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceTimestampIsInvalid()
+        {
+            var coinGeckoCalls = 0;
+            var invalidBinancePayload = JsonSerializer.Serialize(new object[][]
+            {
+                new object[]
+                {
+                    "not-a-timestamp", "100", "110", "90", "100", "1000",
+                    DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds(), "100000"
+                }
+            });
+            using var binanceClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+                Task.FromResult(JsonResponse(invalidBinancePayload))));
+            using var coinGeckoClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+            {
+                coinGeckoCalls++;
+                return Task.FromResult(JsonResponse(CreateCoinGeckoPayload()));
+            }));
+            using var binanceCache = new MemoryCache(new MemoryCacheOptions());
+            using var coinGeckoCache = new MemoryCache(new MemoryCacheOptions());
+            var service = CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache);
+
+            var result = await service.GetAllMarketDataAsync(
+                "bitcoin",
+                1,
+                TestContext.Current.CancellationToken);
+
+            Assert.Equal(1, coinGeckoCalls);
+            Assert.Single(result.priceHistory);
+            Assert.Equal(100m, result.priceHistory[0].Price);
+        }
+
+        [Fact]
         public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceReturnsHttpError()
         {
             var coinGeckoCalls = 0;

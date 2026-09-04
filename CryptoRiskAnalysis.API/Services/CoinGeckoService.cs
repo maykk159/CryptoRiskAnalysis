@@ -180,8 +180,8 @@ namespace CryptoRiskAnalysis.API.Services
         // Helper class for deserialization
         private class CoinGeckoMarketChart
         {
-            public List<List<double>> Prices { get; set; } = new();
-            public List<List<double>> Total_Volumes { get; set; } = new();
+            public List<List<double>>? Prices { get; set; }
+            public List<List<double>>? Total_Volumes { get; set; }
         }
     }
 }

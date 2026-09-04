@@ -56,8 +56,8 @@ namespace CryptoRiskAnalysis.Tests.Services
             // Assert
             Assert.NotNull(priceHistory);
             Assert.NotEmpty(priceHistory);
-            Assert.True(currentVolume > 0);
-            Assert.True(avgVolume > 0);
+            Assert.Equal(45_360_000m, currentVolume);
+            Assert.Equal((42_500_000m + 47_300_000m + 45_360_000m) / 3m, avgVolume);
         }
 
         [Fact]
@@ -182,8 +182,8 @@ namespace CryptoRiskAnalysis.Tests.Services
 
             Assert.Equal(2, priceHistory.Count);
             Assert.Equal(200m, priceHistory[^1].Price);
-            Assert.Equal(2000m, currentVolume);
-            Assert.Equal(1500m, avgVolume);
+            Assert.Equal(400_000m, currentVolume);
+            Assert.Equal(250_000m, avgVolume);
         }
 
         [Fact]
@@ -255,9 +255,9 @@ namespace CryptoRiskAnalysis.Tests.Services
             var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var klines = new object[][]
             {
-                new object[] { now - 172_800_000, "100", "110", "90", "100", "1000", now - 86_400_001 },
-                new object[] { now - 86_400_000, "200", "210", "190", "200", "2000", now - 1 },
-                new object[] { now, "300", "310", "290", "300", "3000", now + 86_399_999 }
+                new object[] { now - 172_800_000, "100", "110", "90", "100", "1000", now - 86_400_001, "100000" },
+                new object[] { now - 86_400_000, "200", "210", "190", "200", "2000", now - 1, "400000" },
+                new object[] { now, "300", "310", "290", "300", "3000", now + 86_399_999, "900000" }
             };
 
             return JsonSerializer.Serialize(klines);

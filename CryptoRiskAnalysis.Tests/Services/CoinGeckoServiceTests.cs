@@ -135,6 +135,32 @@ namespace CryptoRiskAnalysis.Tests.Services
                 service.GetAllMarketDataAsync("bitcoin", 2, TestContext.Current.CancellationToken));
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public async Task GetAllMarketDataAsync_RejectsAndDoesNotCacheMissingSeries(bool omitPrices)
+        {
+            var timestamp = new DateTimeOffset(DateTimeOffset.UtcNow.Date.AddDays(-1), TimeSpan.Zero)
+                .ToUnixTimeMilliseconds();
+            var payload = omitPrices
+                ? JsonSerializer.Serialize(new
+                {
+                    total_volumes = new object[][] { new object[] { timestamp, 1000m } }
+                })
+                : JsonSerializer.Serialize(new
+                {
+                    prices = new object[][] { new object[] { timestamp, 100m } }
+                });
+
+            using var httpClient = CreateHttpClient(payload);
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var service = new CoinGeckoService(httpClient, cache, Mock.Of<ILogger<CoinGeckoService>>());
+
+            await Assert.ThrowsAsync<MarketDataProviderException>(() =>
+                service.GetAllMarketDataAsync("bitcoin", 1, TestContext.Current.CancellationToken));
+            Assert.False(cache.TryGetValue("market_data_bitcoin_1", out _));
+        }
+
         private static HttpClient CreateHttpClient(string payload)
         {
             var handler = new Mock<HttpMessageHandler>();

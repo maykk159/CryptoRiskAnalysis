@@ -87,18 +87,32 @@ namespace CryptoRiskAnalysis.API.Services
                 if (klines == null || klines.Count == 0)
                     throw new MarketDataProviderException("Binance", $"no kline data was returned for {symbol}.");
 
-                if (klines.Any(k => k.Count < 7))
+                if (klines.Any(k => k.Count < 8))
                     throw new MarketDataProviderException("Binance", "a kline did not contain all required fields.");
 
                 // Binance kline index 6 is the candle close time. Exclude the currently open
                 // daily candle so a partial day cannot distort volatility and trend metrics.
-                var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                var completedKlines = klines
-                    .Where(k => k.Count >= 7)
-                    .Where(k => ReadInt64(k[6]) < nowUnixMilliseconds)
-                    .OrderBy(k => ReadInt64(k[0]))
-                    .TakeLast(days)
-                    .ToList();
+                List<List<JsonElement>> completedKlines;
+                try
+                {
+                    var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                    var parsedKlines = klines
+                        .Select(k => (
+                            Kline: k,
+                            OpenTime: ReadUnixTimestamp(k[0]),
+                            CloseTime: ReadUnixTimestamp(k[6])))
+                        .ToList();
+                    completedKlines = parsedKlines
+                        .Where(k => k.CloseTime < nowUnixMilliseconds)
+                        .OrderBy(k => k.OpenTime)
+                        .TakeLast(days)
+                        .Select(k => k.Kline)
+                        .ToList();
+                }
+                catch (Exception ex) when (ex is ArgumentException or FormatException or InvalidOperationException or OverflowException)
+                {
+                    throw new MarketDataProviderException("Binance", "a kline contained an invalid timestamp.", ex);
+                }
 
                 if (completedKlines.Count == 0)
                     throw new MarketDataProviderException("Binance", $"no completed kline data was returned for {symbol}.");
@@ -119,11 +133,12 @@ namespace CryptoRiskAnalysis.API.Services
                             : k[4].GetDecimal()
                     }).OrderBy(p => p.Timestamp).ToList();
 
-                    // 6. Calculate volume metrics from the same completed daily candles.
+                    // Quote-asset turnover (USDT) is index 7. Using base-asset quantity
+                    // (index 5) would not be comparable with CoinGecko's USD volume series.
                     volumes = completedKlines.Select(k =>
-                        k[5].ValueKind == JsonValueKind.String
-                            ? decimal.Parse(k[5].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                            : k[5].GetDecimal()
+                        k[7].ValueKind == JsonValueKind.String
+                            ? decimal.Parse(k[7].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                            : k[7].GetDecimal()
                     ).ToList();
                 }
                 catch (Exception ex) when (ex is FormatException or InvalidOperationException or OverflowException)
@@ -179,6 +194,13 @@ namespace CryptoRiskAnalysis.API.Services
             return value.ValueKind == JsonValueKind.Number
                 ? value.GetInt64()
                 : long.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static long ReadUnixTimestamp(JsonElement value)
+        {
+            var timestamp = ReadInt64(value);
+            _ = DateTimeOffset.FromUnixTimeMilliseconds(timestamp);
+            return timestamp;
         }
 
     }

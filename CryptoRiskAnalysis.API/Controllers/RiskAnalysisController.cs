@@ -1,4 +1,5 @@
 using CryptoRiskAnalysis.API.DTOs;
+using CryptoRiskAnalysis.API.Exceptions;
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.AspNetCore.Mvc;
@@ -40,14 +41,10 @@ namespace CryptoRiskAnalysis.API.Controllers
                 return BadRequest(new ApiResponse<RiskAnalysisResponseDto>("Geçersiz gün parametresi. Yalnızca 7, 30 veya 90 gün kabul edilir."));
             }
 
-            // FIX: Always fetch at least 30 days for trend/volatility calculation context
-            // Trend score requires 30-day MA comparison, so 7 days is insufficient for calculation.
-            int calculationDays = Math.Max(days, 30);
-
             // 1. Fetch ALL data in one call (optimized!)
             var (priceHistory, currentVolume, avgVolume) = await _cryptoDataService.GetAllMarketDataAsync(
                 assetId,
-                calculationDays,
+                days,
                 cancellationToken);
             
             if (priceHistory == null || !priceHistory.Any())
@@ -56,26 +53,23 @@ namespace CryptoRiskAnalysis.API.Controllers
                 return NotFound(new ApiResponse<RiskAnalysisResponseDto>($"No data found for asset: {assetId}"));
             }
 
-            // FIX: Use only the requested period for risk calculation
-            // Keep the full dataset for trend calculation context (30-day MA)
-            var calculationData = priceHistory.Count > days 
-                ? priceHistory.TakeLast(days).ToList() 
-                : priceHistory;
+            if (priceHistory.Count != days)
+            {
+                _logger.LogWarning(
+                    "Unexpected market data count for {AssetId}: expected {ExpectedCount}, received {ActualCount}",
+                    assetId,
+                    days,
+                    priceHistory.Count);
+                throw new MarketDataProviderException(
+                    "Market data service",
+                    $"expected exactly {days} daily observations but received {priceHistory.Count}.");
+            }
 
             // 2. Calculate Risk (100% local - no API calls!)
-            var riskResult = _riskEngine.CalculateRisk(calculationData, currentVolume, avgVolume);
+            var riskResult = _riskEngine.CalculateRisk(priceHistory, currentVolume, avgVolume);
 
             // 3. Map to DTO
             var responseDto = new RiskAnalysisResponseDto(assetId, riskResult);
-
-            // FIX: Filter the returned price history to match the requested days
-            // If user asked for 7 days but we fetched 30 for calculation, only return the last 7 to chart.
-            if (responseDto.PriceHistory.Count > days)
-            {
-                responseDto.PriceHistory = responseDto.PriceHistory
-                    .TakeLast(days)
-                    .ToList();
-            }
 
             _logger.LogInformation("Successfully calculated risk for {AssetId}: Score {Score}. returning {Count} history points.", 
                 assetId, riskResult.CompositeRiskScore, responseDto.PriceHistory.Count);

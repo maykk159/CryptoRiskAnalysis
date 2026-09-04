@@ -40,10 +40,10 @@ namespace CryptoRiskAnalysis.API.Services
             ArgumentNullException.ThrowIfNull(priceHistory);
             ValidateInputs(priceHistory, currentVolume, averageVolume);
 
-            if (priceHistory.Count == 0)
-            {
-                return new RiskScoreResult();
-            }
+            if (priceHistory.Count < MINIMUM_DATA_POINTS)
+                throw new ArgumentException(
+                    $"At least {MINIMUM_DATA_POINTS} daily price observations are required for risk analysis.",
+                    nameof(priceHistory));
 
             var prices = priceHistory.Select(p => p.Price).ToList();
             
