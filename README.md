@@ -129,14 +129,6 @@ VITE_API_URL=https://api.example.com/api
 
 Environment files are ignored by Git. Do not commit credentials or deployment secrets.
 
-### Port already in use
-
-If the API reports that port `5058` is already in use, stop the process currently listening on that port or change `applicationUrl` in `CryptoRiskAnalysis.API/Properties/launchSettings.json`. On Windows, the listener can be identified with:
-
-```powershell
-Get-NetTCPConnection -LocalPort 5058 -State Listen
-```
-
 ## API reference
 
 ### Get a risk analysis
@@ -281,6 +273,6 @@ Local development intentionally uses HTTP and permits the local Vite origins. Be
 
 ## Author
 
-**Mayıs Kuru** — [@maykk159](https://github.com/maykk159)
+**Enes Camkaya** — [@maykk159](https://github.com/maykk159)
 
 Project repository: [github.com/maykk159/CryptoRiskAnalysis](https://github.com/maykk159/CryptoRiskAnalysis)
