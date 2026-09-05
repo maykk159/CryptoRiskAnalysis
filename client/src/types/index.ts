@@ -3,6 +3,13 @@ export interface PriceData {
   price: number;
 }
 
+export interface Asset {
+  id: string;
+  name: string;
+  ticker: string;
+  icon: string;
+}
+
 export interface RiskAnalysisResponse {
   assetId: string;
   compositeRiskScore: number;

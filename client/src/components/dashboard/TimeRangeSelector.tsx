@@ -1,22 +1,20 @@
-import React from 'react';
-
 interface TimeRangeSelectorProps {
   value: number;
   onChange: (days: number) => void;
 }
 
-export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({ value, onChange }) => {
-  const timeRanges = [
-    { days: 7, label: '7 Days' },
-    { days: 30, label: '30 Days' },
-    { days: 90, label: '90 Days' },
-  ];
+const TIME_RANGES = [
+  { days: 7, label: '7 Days' },
+  { days: 30, label: '30 Days' },
+  { days: 90, label: '90 Days' },
+] as const;
 
+export function TimeRangeSelector({ value, onChange }: TimeRangeSelectorProps) {
   return (
     <fieldset className="mb-6">
       <legend className="block text-sm font-medium text-gray-300 mb-2">Analysis Period</legend>
       <div className="flex gap-2">
-        {timeRanges.map(({ days, label }) => (
+        {TIME_RANGES.map(({ days, label }) => (
           <button
             type="button"
             key={days}
@@ -34,4 +32,4 @@ export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({ value, onC
       </div>
     </fieldset>
   );
-};
+}

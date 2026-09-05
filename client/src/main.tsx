@@ -1,7 +1,7 @@
-import React from 'react';
+import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import App from './App.tsx';
+import { Dashboard } from './components/Dashboard';
 import { ApiRequestError } from './services/api.ts';
 import './index.css';
 
@@ -22,16 +22,16 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: shouldRetryQuery,
-      staleTime: 60_000, // 1 minute — matches backend cache duration
-      refetchOnWindowFocus: false, // don't re-fetch when switching tabs
+      staleTime: 60_000,
+      refetchOnWindowFocus: false,
     },
   },
 });
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+  <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      <Dashboard />
     </QueryClientProvider>
-  </React.StrictMode>
+  </StrictMode>
 );

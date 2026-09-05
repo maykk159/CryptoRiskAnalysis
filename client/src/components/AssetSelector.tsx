@@ -1,40 +1,14 @@
-import React, { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ASSETS } from '../constants/assets';
 import { ChevronDown } from 'lucide-react';
-import clsx from 'clsx';
+import { CryptoAssetIcon } from './CryptoAssetIcon';
 
 interface AssetSelectorProps {
   selectedAsset: string;
   onSelectAsset: (asset: string) => void;
 }
 
-const CoinIcon: React.FC<{ iconUrl: string; name: string; ticker: string }> = ({
-  iconUrl,
-  name,
-  ticker,
-}) => {
-  const [failedIconUrl, setFailedIconUrl] = useState<string | null>(null);
-  const hasError = failedIconUrl === iconUrl;
-
-  if (hasError) {
-    return (
-      <div className="w-6 h-6 rounded-full bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-300 shrink-0">
-        {ticker.slice(0, 2).toUpperCase()}
-      </div>
-    );
-  }
-
-  return (
-    <img
-      src={iconUrl}
-      alt={`${name} icon`}
-      className="w-6 h-6 object-contain shrink-0"
-      onError={() => setFailedIconUrl(iconUrl)}
-    />
-  );
-};
-
-export const AssetSelector: React.FC<AssetSelectorProps> = ({ selectedAsset, onSelectAsset }) => {
+export function AssetSelector({ selectedAsset, onSelectAsset }: AssetSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const selectedIndex = Math.max(
     0,
@@ -88,7 +62,7 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({ selectedAsset, onS
     setActiveIndex(current => (current + offset + ASSETS.length) % ASSETS.length);
   };
 
-  const handleTriggerKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       if (isOpen) {
@@ -102,7 +76,7 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({ selectedAsset, onS
     }
   };
 
-  const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+  const handleOptionKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       moveActiveOption(event.key === 'ArrowDown' ? 1 : -1);
@@ -141,21 +115,14 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({ selectedAsset, onS
         aria-labelledby="asset-select-label asset-select-value"
       >
         <div className="flex items-center gap-3">
-          <CoinIcon
-            iconUrl={selectedAssetData.icon}
-            name={selectedAssetData.name}
-            ticker={selectedAssetData.ticker}
-          />
+          <CryptoAssetIcon asset={selectedAssetData} />
           <span id="asset-select-value" className="font-medium text-left">
             {selectedAssetData.name}{' '}
             <span className="text-gray-400 font-normal">({selectedAssetData.ticker})</span>
           </span>
         </div>
         <ChevronDown
-          className={clsx(
-            'w-5 h-5 text-gray-400 transition-transform duration-200 shrink-0',
-            isOpen && 'transform rotate-180'
-          )}
+          className={`w-5 h-5 text-gray-400 transition-transform duration-200 shrink-0 ${isOpen ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -176,16 +143,15 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({ selectedAsset, onS
               role="option"
               aria-selected={selectedAsset === asset.id}
               tabIndex={activeIndex === index ? 0 : -1}
-              className={clsx(
-                'flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors focus:outline-none',
+              className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors focus:outline-none ${
                 selectedAsset === asset.id
                   ? 'bg-blue-600/20 text-white'
                   : 'text-gray-300 hover:bg-gray-700 focus:bg-gray-700'
-              )}
+              }`}
               onClick={() => handleSelect(asset.id)}
               onKeyDown={handleOptionKeyDown}
             >
-              <CoinIcon iconUrl={asset.icon} name={asset.name} ticker={asset.ticker} />
+              <CryptoAssetIcon asset={asset} />
               <span className="font-medium">
                 {asset.name} <span className="text-gray-400 font-normal">({asset.ticker})</span>
               </span>
@@ -195,4 +161,4 @@ export const AssetSelector: React.FC<AssetSelectorProps> = ({ selectedAsset, onS
       )}
     </div>
   );
-};
+}

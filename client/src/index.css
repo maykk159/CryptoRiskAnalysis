@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+.price-chart-line {
+  stroke-dasharray: 2, 000;
+  stroke-dashoffset: 2, 000;
+  animation: draw-price-line 1.2s ease-out forwards;
+}
+
+.price-chart-area {
+  animation: reveal-price-area 0.6s ease-out forwards;
+}
+
+@keyframes draw-price-line {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes reveal-price-area {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .price-chart-line,
+  .price-chart-area {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
+
 /* Custom Scrollbar for Dark Theme */
 ::-webkit-scrollbar {
   width: 8px;
