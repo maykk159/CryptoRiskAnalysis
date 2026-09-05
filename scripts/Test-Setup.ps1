@@ -227,3 +227,7 @@ finally {
         Remove-Item -LiteralPath $resolved -Recurse -Force
     }
 }
+
+# Expected failures leave LASTEXITCODE nonzero, which GitHub Actions uses as the step result.
+# Report success only after all assertions and cleanup have completed; exceptions bypass this.
+exit 0
