@@ -139,6 +139,7 @@ export function PriceChart({ data, timeRange }: PriceChartProps) {
             <path
               className="price-chart-line"
               d={model.linePath}
+              pathLength={1}
               fill="none"
               stroke="#6366f1"
               strokeWidth="3"

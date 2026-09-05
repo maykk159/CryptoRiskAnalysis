@@ -3,8 +3,9 @@
 @tailwind utilities;
 
 .price-chart-line {
-  stroke-dasharray: 2, 000;
-  stroke-dashoffset: 2, 000;
+  /* Match the SVG pathLength so the animation covers the entire line at any size. */
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
   animation: draw-price-line 1.2s ease-out forwards;
 }
 
