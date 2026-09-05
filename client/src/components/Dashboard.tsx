@@ -8,20 +8,17 @@ import { RiskScoreCard } from './dashboard/RiskScoreCard';
 import { AdvancedMetrics } from './dashboard/AdvancedMetrics';
 import { PriceChart } from './PriceChart';
 
-export const Dashboard: React.FC = () => {
+export function Dashboard() {
   const [selectedAssetId, setSelectedAssetId] = useState<string>('bitcoin');
   const [selectedTimeRange, setSelectedTimeRange] = useState<number>(30);
 
   const selectedAsset = ASSETS.find(a => a.id === selectedAssetId) ?? ASSETS[0];
 
-  // Replaces: useEffect + useState(loading) + useState(error) + useState(data) + useCallback + axios
-  // Benefits: automatic cache, deduped requests, background refetch, proper loading/error states
   const { data, isLoading, error, isRefetchError } = useQuery({
     queryKey: ['risk', selectedAssetId, selectedTimeRange],
     queryFn: ({ signal }) => getRiskAnalysis(selectedAssetId, selectedTimeRange, signal),
   });
 
-  // Type-safe error message — no more catch (err: any)
   const errorMessage = !data && error ? getErrorMessage(error, selectedAsset.name) : null;
   const refetchErrorMessage =
     data && isRefetchError && error ? getErrorMessage(error, selectedAsset.name) : null;
@@ -104,4 +101,4 @@ export const Dashboard: React.FC = () => {
       </div>
     </div>
   );
-};
+}

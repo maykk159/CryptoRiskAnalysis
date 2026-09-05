@@ -1,6 +1,5 @@
-import type { ApiResponse, RiskAnalysisResponse } from '../types/index';
+import type { ApiResponse, RiskAnalysisResponse } from '../types';
 
-// Reads from .env.local in development — prevents hardcoded localhost in production
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5058/api';
 
 export class ApiRequestError extends Error {
@@ -43,11 +42,6 @@ export const getRiskAnalysis = async (
   return payload.data;
 };
 
-/**
- * Extracts a user-friendly error message from any error type.
- * Replaces the `catch (err: any)` anti-pattern with proper type narrowing
- * so TypeScript can actually check our error handling logic.
- */
 export function getErrorMessage(err: unknown, assetName?: string): string {
   if (err instanceof ApiRequestError) {
     const { status } = err;
