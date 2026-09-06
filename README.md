@@ -52,7 +52,7 @@ The API follows a layered structure:
 |---|---|---|
 | Role | Primary for mapped assets | Fallback and long-tail assets |
 | Market data | Daily USDT klines | Daily USD market chart |
-| Cache duration | 60 seconds | 180 seconds |
+| Cache duration | 60 seconds | 60 seconds |
 | Authentication | Not required | Not required |
 
 Transient network errors, upstream `5xx` responses, and `429` responses are retried up to three times with exponential delays. A provider circuit opens for 30 seconds after five handled failures, and each provider request has a 10-second policy timeout.
@@ -160,6 +160,8 @@ GET /api/RiskAnalysis/{assetId}?days={7|30|90}
 ```
 
 `days` defaults to `30`. The `assetId` uses the CoinGecko identifier format, such as `bitcoin`, `ethereum`, or `polygon-ecosystem-token`.
+The displayed `currentPrice` comes from the latest provider observation and refreshes every 60 seconds while the dashboard is open. Risk metrics and `priceHistory` continue to use completed UTC daily candles only.
+
 
 Example request:
 
@@ -176,6 +178,7 @@ Example response:
   "data": {
     "assetId": "bitcoin",
     "compositeRiskScore": 31.42,
+    "currentPrice": 111234.56,
     "volatilityScore": 38.17,
     "trendScore": 24.86,
     "volumeScore": 29.35,

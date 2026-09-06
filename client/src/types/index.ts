@@ -12,6 +12,7 @@ export interface Asset {
 
 export interface RiskAnalysisResponse {
   assetId: string;
+  currentPrice: number;
   compositeRiskScore: number;
   volatilityScore: number;
   trendScore: number;

@@ -57,7 +57,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             };
 
             _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
-                .ReturnsAsync((priceHistory, 1000m, 900m));
+                .ReturnsAsync((priceHistory, 123.45m, 1000m, 900m));
             _mockRiskEngine.Setup(e => e.CalculateRisk(It.IsAny<List<PriceData>>(), 1000m, 900m))
                 .Returns(riskResult);
 
@@ -71,6 +71,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             Assert.True(response.Succeeded);
             Assert.NotNull(response.Data);
             Assert.Equal(50m, response.Data.CompositeRiskScore);
+            Assert.Equal(123.45m, response.Data.CurrentPrice);
         }
 
         [Fact]
@@ -96,7 +97,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             // Arrange
             var assetId = "invalid_coin";
             _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
-                .ReturnsAsync((new List<PriceData>(), 0m, 0m));
+                .ReturnsAsync((new List<PriceData>(), 0m, 0m, 0m));
 
             // Act
             var result = await _controller.GetRiskAnalysis(
@@ -120,7 +121,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             };
             _mockCryptoService
                 .Setup(s => s.GetAllMarketDataAsync(assetId, 30, It.IsAny<CancellationToken>()))
-                .ReturnsAsync((priceHistory, 1000m, 900m));
+                .ReturnsAsync((priceHistory, 123.45m, 1000m, 900m));
 
             await Assert.ThrowsAsync<MarketDataProviderException>(() =>
                 _controller.GetRiskAnalysis(assetId, 30, TestContext.Current.CancellationToken));
@@ -165,7 +166,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             };
 
             _mockCryptoService.Setup(s => s.GetAllMarketDataAsync(assetId, 7, It.IsAny<CancellationToken>()))
-                .ReturnsAsync((priceHistory, 1000m, 900m));
+                .ReturnsAsync((priceHistory, 123.45m, 1000m, 900m));
             _mockRiskEngine.Setup(e => e.CalculateRisk(priceHistory, 1000m, 900m))
                 .Returns(riskResult);
 
@@ -197,7 +198,7 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             var cancellationToken = cancellationSource.Token;
             _mockCryptoService
                 .Setup(service => service.GetAllMarketDataAsync("bitcoin", 7, cancellationToken))
-                .ReturnsAsync((priceHistory, 1000m, 900m));
+                .ReturnsAsync((priceHistory, 123.45m, 1000m, 900m));
             _mockRiskEngine
                 .Setup(engine => engine.CalculateRisk(priceHistory, 1000m, 900m))
                 .Returns(new RiskScoreResult { PriceHistory = priceHistory });

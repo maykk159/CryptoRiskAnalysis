@@ -223,8 +223,8 @@ try {
     Write-Host ("Setup complete in {0:N1}s." -f $timer.Elapsed.TotalSeconds) -ForegroundColor Green
     if (-not $Verify) { Write-Host 'For builds, lint, and tests: .\setup.cmd -Verify' }
     Write-Host "Open two terminals at: $projectRoot"
-    Write-Host 'API:    dotnet run --project CryptoRiskAnalysis.API --launch-profile http'
-    Write-Host 'Client: npm.cmd --prefix client run dev'
+    Write-Host 'API:    cd CryptoRiskAnalysis.API  then  dotnet run'
+    Write-Host 'Client: cd client                  then  npm run dev'
     Write-Host 'URLs:   http://localhost:5058/swagger | http://localhost:5173'
 }
 catch {

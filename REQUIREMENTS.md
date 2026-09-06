@@ -47,16 +47,19 @@ On macOS/Linux, use `npm` instead of `npm.cmd`.
 
 ## Run
 
-Open two terminals at the repository root:
+Open two terminals at the repository root. Enter each application directory once;
+after that, starting it again only requires the short command shown below.
 
 ```powershell
 # Terminal 1
-dotnet run --project CryptoRiskAnalysis.API --launch-profile http
+cd CryptoRiskAnalysis.API
+dotnet run
 ```
 
 ```powershell
 # Terminal 2
-npm.cmd --prefix client run dev
+cd client
+npm run dev
 ```
 
 - API / Swagger: `http://localhost:5058/swagger`

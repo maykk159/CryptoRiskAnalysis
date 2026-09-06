@@ -11,11 +11,13 @@ namespace CryptoRiskAnalysis.API.DTOs
         public decimal VolatilityScore { get; set; }
         public decimal TrendScore { get; set; }
         public decimal VolumeScore { get; set; }
+        public decimal CurrentPrice { get; set; }
         public RiskAnalysisResponseDto() { }
 
-        public RiskAnalysisResponseDto(string assetId, RiskScoreResult riskResult)
+        public RiskAnalysisResponseDto(string assetId, decimal currentPrice, RiskScoreResult riskResult)
         {
             AssetId = assetId;
+            CurrentPrice = currentPrice;
             CompositeRiskScore = riskResult.CompositeRiskScore;
             VolatilityScore = riskResult.VolatilityScore;
             TrendScore = riskResult.TrendScore;

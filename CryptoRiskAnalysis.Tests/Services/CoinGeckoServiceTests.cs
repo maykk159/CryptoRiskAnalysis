@@ -58,13 +58,14 @@ namespace CryptoRiskAnalysis.Tests.Services
             var logger = Mock.Of<ILogger<CoinGeckoService>>();
             var service = new CoinGeckoService(httpClient, cache, logger);
 
-            var (priceHistory, currentVolume, avgVolume) =
+            var (priceHistory, currentPrice, currentVolume, avgVolume) =
                 await service.GetAllMarketDataAsync(
                     "bitcoin", 2, TestContext.Current.CancellationToken);
 
             Assert.Equal(2, priceHistory.Count);
             Assert.Equal(105m, priceHistory[0].Price);
             Assert.Equal(110m, priceHistory[^1].Price);
+            Assert.Equal(999m, currentPrice);
             Assert.Equal(1100m, currentVolume);
             Assert.Equal(1075m, avgVolume);
         }
@@ -102,13 +103,14 @@ namespace CryptoRiskAnalysis.Tests.Services
                 cache,
                 Mock.Of<ILogger<CoinGeckoService>>());
 
-            var (priceHistory, currentVolume, avgVolume) =
+            var (priceHistory, currentPrice, currentVolume, avgVolume) =
                 await service.GetAllMarketDataAsync(
                     "bitcoin", 2, TestContext.Current.CancellationToken);
 
             Assert.Equal(2, priceHistory.Count);
             Assert.Equal(lastCompletedTimestamp, priceHistory[^1].Timestamp);
             Assert.Equal(110m, priceHistory[^1].Price);
+            Assert.Equal(110m, currentPrice);
             Assert.Equal(1100m, currentVolume);
             Assert.Equal(1050m, avgVolume);
         }

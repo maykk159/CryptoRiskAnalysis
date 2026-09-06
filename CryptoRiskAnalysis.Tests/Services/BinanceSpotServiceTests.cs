@@ -51,12 +51,13 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act
-            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
+            var (priceHistory, currentPrice, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
                 "bitcoin", 3, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.NotNull(priceHistory);
             Assert.NotEmpty(priceHistory);
+            Assert.Equal(43_200m, currentPrice);
             Assert.Equal(45_360_000m, currentVolume);
             Assert.Equal((42_500_000m + 47_300_000m + 45_360_000m) / 3m, avgVolume);
         }
@@ -87,7 +88,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act
-            var (priceHistory, _, _) = await service.GetAllMarketDataAsync(
+            var (priceHistory, _, _, _) = await service.GetAllMarketDataAsync(
                 "bitcoin", 3, TestContext.Current.CancellationToken);
 
             // Assert - Verify chronological order (oldest first)
@@ -140,9 +141,10 @@ namespace CryptoRiskAnalysis.Tests.Services
         {
             // Arrange
             var cachedData = (
-                new List<API.Models.PriceData> { new API.Models.PriceData { Timestamp = 1000, Price = 100m } },
-                1000m,
-                900m
+                priceHistory: new List<API.Models.PriceData> { new API.Models.PriceData { Timestamp = 1000, Price = 100m } },
+                currentPrice: 105m,
+                currentVolume: 1000m,
+                avgVolume: 900m
             );
 
             object? cacheValue = cachedData;
@@ -156,9 +158,10 @@ namespace CryptoRiskAnalysis.Tests.Services
                 "bitcoin", 30, TestContext.Current.CancellationToken);
 
             // Assert
-            Assert.Equal(cachedData.Item1, result.priceHistory);
-            Assert.Equal(cachedData.Item2, result.currentVolume);
-            Assert.Equal(cachedData.Item3, result.avgVolume);
+            Assert.Equal(cachedData.priceHistory, result.priceHistory);
+            Assert.Equal(cachedData.currentPrice, result.currentPrice);
+            Assert.Equal(cachedData.currentVolume, result.currentVolume);
+            Assert.Equal(cachedData.avgVolume, result.avgVolume);
 
             // Verify HTTP was never called
             _mockHttpHandler.Protected().Verify(
@@ -190,11 +193,12 @@ namespace CryptoRiskAnalysis.Tests.Services
             using var cache = new MemoryCache(new MemoryCacheOptions());
             var service = new BinanceSpotService(_httpClient, cache, _mockLogger.Object);
 
-            var (priceHistory, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
+            var (priceHistory, currentPrice, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
                 "bitcoin", 2, TestContext.Current.CancellationToken);
 
             Assert.Equal(2, priceHistory.Count);
             Assert.Equal(200m, priceHistory[^1].Price);
+            Assert.Equal(300m, currentPrice);
             Assert.Equal(400_000m, currentVolume);
             Assert.Equal(250_000m, avgVolume);
         }

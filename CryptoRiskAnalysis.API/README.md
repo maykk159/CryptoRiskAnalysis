@@ -33,6 +33,7 @@ GET /api/RiskAnalysis/{assetId}?days={7|30|90}
 - `assetId` is a CoinGecko asset ID such as `bitcoin` or `ethereum`.
 - `days` accepts `7`, `30`, or `90` and defaults to `30`.
 - A successful response contains exactly the requested number of completed daily observations.
+- `currentPrice` is the latest provider observation; `priceHistory` contains completed UTC daily observations only.
 
 All success and application-generated error responses use the `ApiResponse<T>` envelope:
 
@@ -42,6 +43,7 @@ All success and application-generated error responses use the `ApiResponse<T>` e
   "message": null,
   "data": {
     "assetId": "bitcoin",
+    "currentPrice": 111234.56,
     "compositeRiskScore": 31.42,
     "volatilityScore": 38.17,
     "trendScore": 24.86,
@@ -58,7 +60,7 @@ The values above only demonstrate the response shape; live results depend on pro
 
 - Binance is tried first for mapped assets and uses completed daily USDT klines. Quote-asset turnover is used as the volume measure.
 - CoinGecko is used for unmapped assets and as fallback for expected Binance provider, timeout, rate-limit, and open-circuit failures.
-- Binance results are cached for 60 seconds; CoinGecko results are cached for 180 seconds.
+- Binance and CoinGecko results are cached for 60 seconds.
 - Concurrent cache misses for the same provider, asset, and period share one outbound request.
 - Each attempt has a 10-second timeout and the total resilience pipeline has a 30-second timeout.
 - Transient network errors, `408`, `429`, and `5xx` responses are eligible for exponential retry.

@@ -30,9 +30,9 @@ namespace CryptoRiskAnalysis.API.Services
         /// <summary>
         /// Fetches market data with smart routing:
         /// 1. Try Binance first for mapped assets (1-minute cache).
-        /// 2. Fall back to CoinGecko when needed (3-minute cache).
+        /// 2. Fall back to CoinGecko when needed (1-minute cache).
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        public async Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default)

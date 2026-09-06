@@ -42,7 +42,7 @@ namespace CryptoRiskAnalysis.API.Controllers
             }
 
             // 1. Fetch ALL data in one call (optimized!)
-            var (priceHistory, currentVolume, avgVolume) = await _cryptoDataService.GetAllMarketDataAsync(
+            var (priceHistory, currentPrice, currentVolume, avgVolume) = await _cryptoDataService.GetAllMarketDataAsync(
                 assetId,
                 days,
                 cancellationToken);
@@ -69,7 +69,7 @@ namespace CryptoRiskAnalysis.API.Controllers
             var riskResult = _riskEngine.CalculateRisk(priceHistory, currentVolume, avgVolume);
 
             // 3. Map to DTO
-            var responseDto = new RiskAnalysisResponseDto(assetId, riskResult);
+            var responseDto = new RiskAnalysisResponseDto(assetId, currentPrice, riskResult);
 
             _logger.LogInformation("Successfully calculated risk for {AssetId}: Score {Score}. returning {Count} history points.",
                 assetId, riskResult.CompositeRiskScore, responseDto.PriceHistory.Count);

@@ -14,6 +14,7 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly ILogger<CoinGeckoService> _logger;
         private readonly MarketDataRequestLock _requestLock;
         private const string BaseUrl = "https://api.coingecko.com/api/v3";
+        private const int CacheDurationSeconds = 60;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
         public CoinGeckoService(
@@ -34,7 +35,7 @@ namespace CryptoRiskAnalysis.API.Services
         /// Previously: 429 was silently returning an empty list, hiding the error from the caller.
         /// Now: typed exceptions preserve provider failure details for the middleware.
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        public async Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default)
@@ -45,7 +46,7 @@ namespace CryptoRiskAnalysis.API.Services
             string cacheKey = $"market_data_{assetId}_{days}";
 
             // Check cache first
-            if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal) cachedData))
+            if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal, decimal) cachedData))
             {
                 _logger.LogDebug("CoinGecko Cache HIT for {AssetId}", assetId);
                 return cachedData;
@@ -101,6 +102,8 @@ namespace CryptoRiskAnalysis.API.Services
                     throw new MarketDataProviderException("CoinGecko", "the price or volume series was missing.");
                 }
 
+
+                var currentPrice = ReadCurrentPrice(data.Prices);
                 // CoinGecko can append a live intraday point even when daily granularity is
                 // requested. Keep UTC-midnight daily points and completed previous days only.
                 var normalizedPrices = NormalizeCompletedDailyValues(data.Prices, "price")
@@ -126,16 +129,52 @@ namespace CryptoRiskAnalysis.API.Services
                 var currentVolume = volumeHistory[^1].Volume;
                 var avgVolume = volumeHistory.Average(point => point.Volume);
 
-                var result = (priceHistory, currentVolume, avgVolume);
+                var result = (priceHistory, currentPrice, currentVolume, avgVolume);
 
-                // Cache for 3 minutes (CoinGecko rate limits are stricter than Binance)
+                // Keep the displayed current price no more than one application-cache minute old.
                 _cache.Set(cacheKey, result, new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(180)));
+                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
 
-                _logger.LogInformation("CoinGecko: Fetched {PriceCount} prices for {AssetId} — cached for 3 minutes",
-                    priceHistory.Count, assetId);
+                _logger.LogInformation("CoinGecko: Fetched {PriceCount} prices for {AssetId} — cached for {Duration}s",
+                    priceHistory.Count, assetId, CacheDurationSeconds);
 
                 return result;
+            }
+        }
+
+
+        private static decimal ReadCurrentPrice(IEnumerable<List<double>> values)
+        {
+            var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var latestValue = values
+                .Where(value => value.Count >= 2 &&
+                                double.IsFinite(value[0]) &&
+                                double.IsFinite(value[1]) &&
+                                value[0] <= nowUnixMilliseconds)
+                .OrderBy(value => value[0])
+                .LastOrDefault();
+
+            if (latestValue == null)
+                throw new MarketDataProviderException("CoinGecko", "the price series was empty or malformed.");
+
+            try
+            {
+                if (Math.Truncate(latestValue[0]) != latestValue[0])
+                    throw new OverflowException("Timestamp was not an integer.");
+
+                var timestamp = checked((long)latestValue[0]);
+                _ = DateTimeOffset.FromUnixTimeMilliseconds(timestamp);
+                var currentPrice = checked((decimal)latestValue[1]);
+
+                if (currentPrice <= 0)
+                    throw new MarketDataProviderException("CoinGecko", "the current price was zero or negative.");
+
+                return currentPrice;
+            }
+            catch (Exception ex) when (ex is ArgumentOutOfRangeException or OverflowException)
+            {
+                throw new MarketDataProviderException(
+                    "CoinGecko", "the latest price contained an invalid timestamp or numeric value.", ex);
             }
         }
 

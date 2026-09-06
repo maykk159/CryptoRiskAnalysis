@@ -16,6 +16,7 @@ vi.mock('../services/api', async importOriginal => ({
 const getAnalysis = vi.mocked(getRiskAnalysis);
 const clients: QueryClient[] = [];
 const analysis: RiskAnalysisResponse = {
+  currentPrice: 111.25,
   assetId: 'bitcoin',
   compositeRiskScore: 42,
   volatilityScore: 50,
@@ -88,6 +89,11 @@ describe('Dashboard loading and recovery', () => {
     await act(async () => request.resolve(analysis));
 
     expect(await screen.findByRole('heading', { name: 'Advanced Metrics' })).toBeTruthy();
+    const formattedCurrentPrice = analysis.currentPrice.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 8,
+    });
+    expect(container.textContent).toContain(`$${formattedCurrentPrice}`);
     expect(container.contains(skeleton)).toBe(false);
     expect(container.querySelector('[aria-busy="true"]')).toBeNull();
     expect(screen.getByRole('status').textContent).toContain('is ready');

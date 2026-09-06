@@ -33,7 +33,7 @@ namespace CryptoRiskAnalysis.API.Services
         /// HTTP retries (on 5xx and 429) are handled automatically by the Polly policy
         /// configured in ServiceCollectionExtensions — no manual retry loop needed here.
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        public async Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default)
@@ -48,7 +48,7 @@ namespace CryptoRiskAnalysis.API.Services
 
             // 2. Check cache first (1-minute cache for fresh data)
             string cacheKey = $"binance_{symbol}_{days}";
-            if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal) cachedData))
+            if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal, decimal) cachedData))
             {
                 _logger.LogDebug("Binance Cache HIT for {AssetId} ({Symbol})", assetId, symbol);
                 return cachedData;
@@ -106,6 +106,7 @@ namespace CryptoRiskAnalysis.API.Services
                 // Binance kline index 6 is the candle close time. Exclude the currently open
                 // daily candle so a partial day cannot distort volatility and trend metrics.
                 List<List<JsonElement>> completedKlines;
+                JsonElement latestCloseValue;
                 try
                 {
                     var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -115,6 +116,7 @@ namespace CryptoRiskAnalysis.API.Services
                             OpenTime: ReadUnixTimestamp(k[0]),
                             CloseTime: ReadUnixTimestamp(k[6])))
                         .ToList();
+                    latestCloseValue = parsedKlines.MaxBy(k => k.OpenTime).Kline[4];
                     completedKlines = parsedKlines
                         .Where(k => k.CloseTime < nowUnixMilliseconds)
                         .OrderBy(k => k.OpenTime)
@@ -134,30 +136,29 @@ namespace CryptoRiskAnalysis.API.Services
                 // Binance returns: [timestamp(number), open(string), high(string), low(string), close(string), volume(string), ...]
                 List<PriceData> priceHistory;
                 List<decimal> volumes;
+                decimal currentPrice;
                 try
                 {
+                    currentPrice = ReadDecimal(latestCloseValue);
                     priceHistory = completedKlines.Select(k => new PriceData
                     {
                         // Timestamp is a number
                         Timestamp = ReadInt64(k[0]),
                         // Close price is index 4 — use InvariantCulture to handle decimal points correctly
-                        Price = k[4].ValueKind == JsonValueKind.String
-                            ? decimal.Parse(k[4].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                            : k[4].GetDecimal()
+                        Price = ReadDecimal(k[4])
                     }).OrderBy(p => p.Timestamp).ToList();
 
                     // Quote-asset turnover (USDT) is index 7. Using base-asset quantity
                     // (index 5) would not be comparable with CoinGecko's USD volume series.
-                    volumes = completedKlines.Select(k =>
-                        k[7].ValueKind == JsonValueKind.String
-                            ? decimal.Parse(k[7].GetString()!, System.Globalization.CultureInfo.InvariantCulture)
-                            : k[7].GetDecimal()
-                    ).ToList();
+                    volumes = completedKlines.Select(k => ReadDecimal(k[7])).ToList();
                 }
                 catch (Exception ex) when (ex is FormatException or InvalidOperationException or OverflowException)
                 {
                     throw new MarketDataProviderException("Binance", "a kline contained an invalid price, volume, or timestamp.", ex);
                 }
+
+                if (currentPrice <= 0)
+                    throw new MarketDataProviderException("Binance", "the current price was zero or negative.");
 
                 var volumeHistory = completedKlines
                     .Select((k, index) => (priceHistory[index].Timestamp, Volume: volumes[index]))
@@ -180,7 +181,7 @@ namespace CryptoRiskAnalysis.API.Services
                     avgVolume = 0;
                 }
 
-                var result = (priceHistory, currentVolume, avgVolume);
+                var result = (priceHistory, currentPrice, currentVolume, avgVolume);
 
                 // 7. Cache for 1 minute
                 _cache.Set(cacheKey, result, new MemoryCacheEntryOptions()
@@ -207,6 +208,13 @@ namespace CryptoRiskAnalysis.API.Services
             return value.ValueKind == JsonValueKind.Number
                 ? value.GetInt64()
                 : long.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static decimal ReadDecimal(JsonElement value)
+        {
+            return value.ValueKind == JsonValueKind.String
+                ? decimal.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                : value.GetDecimal();
         }
 
         private static long ReadUnixTimestamp(JsonElement value)

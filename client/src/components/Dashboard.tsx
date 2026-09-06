@@ -19,6 +19,7 @@ export function Dashboard() {
   const { data, isPending, isFetching, error, isRefetchError, refetch } = useQuery({
     queryKey: ['risk', selectedAssetId, selectedTimeRange],
     queryFn: ({ signal }) => getRiskAnalysis(selectedAssetId, selectedTimeRange, signal),
+    refetchInterval: 60_000,
   });
 
   const errorMessage = !data && error ? getErrorMessage(error, selectedAsset.name) : null;
@@ -28,11 +29,6 @@ export function Dashboard() {
   const retryAnalysis = () => {
     void refetch({ cancelRefetch: false });
   };
-
-  const latestPrice =
-    data?.priceHistory && data.priceHistory.length > 0
-      ? data.priceHistory[data.priceHistory.length - 1].price
-      : undefined;
 
   return (
     <div className="min-h-screen bg-gray-900 text-white p-4 sm:p-8">
@@ -110,7 +106,7 @@ export function Dashboard() {
           {isPending && <DashboardSkeleton />}
           {data && (
             <div className="grid grid-cols-1 gap-6 sm:gap-8 min-w-0">
-              <RiskScoreCard data={data} asset={selectedAsset} currentPrice={latestPrice} />
+              <RiskScoreCard data={data} asset={selectedAsset} currentPrice={data.currentPrice} />
               <AdvancedMetrics data={data} />
               <PriceChart data={data.priceHistory} timeRange={selectedTimeRange} />
             </div>
