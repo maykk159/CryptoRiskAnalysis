@@ -61,7 +61,7 @@ function renderDashboard() {
 beforeEach(() => {
   vi.stubGlobal(
     'matchMedia',
-    vi.fn(() => ({ matches: true }))
+    vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
   );
 });
 
@@ -73,7 +73,7 @@ afterEach(() => {
 });
 
 describe('Dashboard loading and recovery', () => {
-  it('reserves all three cards while loading and replaces them with the result', async () => {
+  it('reserves the dashboard layout while loading and replaces them with the result', async () => {
     const request = deferredAnalysis();
     getAnalysis.mockReturnValueOnce(request.promise);
     const { container } = renderDashboard();
@@ -82,14 +82,14 @@ describe('Dashboard loading and recovery', () => {
       'Loading 30-day risk analysis for Bitcoin.'
     );
     const skeleton = container.querySelector('[aria-busy="true"] > [aria-hidden="true"]');
-    expect(skeleton?.children).toHaveLength(3);
+    expect(skeleton).toBeTruthy();
     expect(screen.queryByRole('heading', { name: 'Advanced Metrics' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
 
     await act(async () => request.resolve(analysis));
 
     expect(await screen.findByRole('heading', { name: 'Advanced Metrics' })).toBeTruthy();
-    const formattedCurrentPrice = analysis.currentPrice.toLocaleString(undefined, {
+    const formattedCurrentPrice = analysis.currentPrice.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 8,
     });
@@ -97,7 +97,7 @@ describe('Dashboard loading and recovery', () => {
     expect(container.contains(skeleton)).toBe(false);
     expect(container.querySelector('[aria-busy="true"]')).toBeNull();
     expect(screen.getByRole('status').textContent).toContain('is ready');
-    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
   });
 
   it('recovers from an initial error through Try again without reloading the page', async () => {
@@ -144,7 +144,7 @@ describe('Dashboard loading and recovery', () => {
     expect(await screen.findByText('42.75%')).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Advanced Metrics' })).toBe(metricsHeading);
     expect(screen.queryByText('12.34%')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Refresh' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
   });
 
   it('retains the last successful data after a failed refresh and retries the selected query', async () => {
@@ -217,13 +217,13 @@ describe('Dashboard loading and recovery', () => {
     renderDashboard();
     await screen.findByRole('heading', { name: 'Advanced Metrics' });
 
-    await user.click(screen.getByRole('button', { name: 'Select Crypto Asset Bitcoin (BTC)' }));
+    await user.click(screen.getByRole('combobox', { name: 'Select Crypto Asset' }));
     await user.click(screen.getByRole('option', { name: /Ethereum/ }));
 
     expect(screen.getByRole('status').textContent).toContain(
       'Loading 30-day risk analysis for Ethereum.'
     );
-    expect(screen.queryByRole('heading', { name: /Ethereum/ })).toBeNull();
+    expect(screen.getByRole('heading', { name: /Ethereum/ })).toBeTruthy();
     expect(screen.queryByText('12.34%')).toBeNull();
     expect(getAnalysis).toHaveBeenLastCalledWith('ethereum', 30, expect.any(AbortSignal));
     await act(async () =>
@@ -232,5 +232,59 @@ describe('Dashboard loading and recovery', () => {
 
     expect(await screen.findByRole('heading', { name: /Ethereum/ })).toBeTruthy();
     expect(screen.getByText('42.75%')).toBeTruthy();
+  });
+});
+
+describe('Dashboard data integrity', () => {
+  it('uses currentPrice only, preserving tiny prices and showing unavailable for missing values', async () => {
+    getAnalysis.mockResolvedValueOnce({ ...analysis, currentPrice: 0.00001234 });
+    const { client } = renderDashboard();
+    await screen.findByRole('heading', { name: 'Advanced Metrics' });
+    const summary = screen.getByRole('region', { name: 'Selected asset and current price' });
+    expect(summary.textContent).toContain('$0.00001234');
+    expect(summary.textContent).not.toContain('$110');
+    await act(async () =>
+      client.setQueryData(['risk', 'bitcoin', 30], { ...analysis, currentPrice: undefined })
+    );
+    await waitFor(() => expect(summary.textContent).toContain('Unavailable'));
+    expect(summary.textContent).not.toContain('$110');
+  });
+
+  it('keeps the successful fetch time after refresh failure and clears it for a new selection', async () => {
+    const user = userEvent.setup();
+    const refresh = deferredAnalysis();
+    const next = deferredAnalysis();
+    getAnalysis
+      .mockResolvedValueOnce(analysis)
+      .mockReturnValueOnce(refresh.promise)
+      .mockReturnValueOnce(next.promise);
+    const { container } = renderDashboard();
+    await screen.findByRole('heading', { name: 'Advanced Metrics' });
+    const timestamp = container.querySelector('time')?.dateTime;
+    expect(timestamp).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Refresh' }));
+    await act(async () => refresh.reject(new Error('Temporarily unavailable')));
+    await screen.findByText(/Showing the last successfully loaded data/);
+    expect(container.querySelector('time')?.dateTime).toBe(timestamp);
+    await user.click(screen.getByRole('button', { name: '7 Days' }));
+    expect(container.querySelector('time')).toBeNull();
+    expect(screen.queryByText('$111.25')).toBeNull();
+    await act(async () => next.resolve(analysis));
+  });
+
+  it('does not request data while typing and prevents parallel manual refreshes', async () => {
+    const user = userEvent.setup();
+    const refresh = deferredAnalysis();
+    getAnalysis.mockResolvedValueOnce(analysis).mockReturnValueOnce(refresh.promise);
+    renderDashboard();
+    await screen.findByRole('heading', { name: 'Advanced Metrics' });
+    await user.click(screen.getByRole('combobox'));
+    await user.type(screen.getByRole('combobox'), 'ethereum');
+    expect(getAnalysis).toHaveBeenCalledTimes(1);
+    await user.keyboard('{Escape}');
+    await user.dblClick(screen.getByRole('button', { name: 'Refresh' }));
+    expect(getAnalysis).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Refresh' }).disabled).toBe(true);
+    await act(async () => refresh.resolve(analysis));
   });
 });

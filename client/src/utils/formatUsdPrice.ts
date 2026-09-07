@@ -1,21 +1,23 @@
-export const formatUsdPrice = (value: number) => {
-  if (!Number.isFinite(value)) {
-    return '$—';
+/** Full prices retain six significant digits below $1; axes may abbreviate large values. */
+export const formatUsdPrice = (
+  value: number | null | undefined,
+  mode: 'full' | 'axis' = 'full'
+) => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) return 'Unavailable';
+  if (mode === 'axis' && value >= 10_000) {
+    return '$' + value.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 });
   }
-
-  const absoluteValue = Math.abs(value);
-
-  if (absoluteValue !== 0 && absoluteValue < 1e-20) {
-    return `$${value.toLocaleString('en-US', {
-      notation: 'scientific',
-      maximumSignificantDigits: 6,
-    })}`;
+  if (value > 0 && value < 1e-8) {
+    return (
+      '$' + value.toLocaleString('en-US', { notation: 'scientific', maximumSignificantDigits: 4 })
+    );
   }
-
-  const maximumFractionDigits =
-    absoluteValue > 0 && absoluteValue < 1
-      ? Math.min(20, Math.max(3, 5 - Math.floor(Math.log10(absoluteValue))))
-      : 3;
-
-  return `$${value.toLocaleString('en-US', { maximumFractionDigits })}`;
+  if (value > 0 && value < 1) {
+    return (
+      '$' + value.toLocaleString('en-US', { maximumSignificantDigits: mode === 'axis' ? 3 : 6 })
+    );
+  }
+  return (
+    '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  );
 };

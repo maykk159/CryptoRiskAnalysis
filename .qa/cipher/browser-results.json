@@ -1,0 +1,53 @@
+{
+  "results": [
+    {
+      "name": "bitcoin-1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "bitcoin-1366",
+      "width": 1366,
+      "scrollWidth": 1366,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "bitcoin-768",
+      "width": 768,
+      "scrollWidth": 768,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "bitcoin-390",
+      "width": 390,
+      "scrollWidth": 390,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "bitcoin-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "search-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "shib-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "long-name-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    }
+  ],
+  "errors": []
+}

@@ -1,0 +1,115 @@
+{
+  "results": [
+    {
+      "name": "loading-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "initial-429-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "refresh-error-1366",
+      "width": 1366,
+      "scrollWidth": 1366,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "failed-refresh-retains-timestamp",
+      "passed": true,
+      "beforeHeight": 1205
+    },
+    {
+      "name": "refresh-error-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "offline-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "empty-chart-390",
+      "width": 390,
+      "scrollWidth": 390,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "keyboard-first-1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "keyboard-last-reduced-motion-1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "metric-help-1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "risk-expanded-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "no-assets-360",
+      "width": 360,
+      "scrollWidth": 360,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "keyboard-selection-and-tab",
+      "passed": true
+    },
+    {
+      "name": "zoom-200-1440",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "noHorizontalOverflow": true
+    },
+    {
+      "name": "contrast",
+      "ratios": {
+        "ink/canvas": 16.96,
+        "ink/panel": 15.55,
+        "ink/raised": 13.87,
+        "secondary/canvas": 9.6,
+        "secondary/panel": 8.8,
+        "secondary/raised": 7.85,
+        "muted/canvas": 6.75,
+        "muted/panel": 6.19,
+        "muted/raised": 5.52,
+        "accent/canvas": 9.18,
+        "accent/panel": 8.41,
+        "accent/raised": 7.5,
+        "positive/canvas": 10.23,
+        "positive/panel": 9.38,
+        "positive/raised": 8.36,
+        "warning/canvas": 11.87,
+        "warning/panel": 10.88,
+        "warning/raised": 9.71,
+        "negative/canvas": 7.44,
+        "negative/panel": 6.83,
+        "negative/raised": 6.09
+      },
+      "controlOnPanel": 3.6762040643000637,
+      "controlOnRaised": 3.279127721495337,
+      "accentOnSelection": 5.909413137815919
+    }
+  ],
+  "errors": []
+}

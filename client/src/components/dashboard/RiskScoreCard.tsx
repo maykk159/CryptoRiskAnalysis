@@ -1,237 +1,150 @@
-import { memo, type ComponentType } from 'react';
-import { Activity, BarChart2, TrendingUp } from 'lucide-react';
-import { CryptoAssetIcon } from '../CryptoAssetIcon';
-import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
-import type { Asset, RiskAnalysisResponse } from '../../types';
+import { useState, useId } from 'react';
+import { Activity, BarChart3, ChevronDown, ShieldCheck, TrendingUp } from 'lucide-react';
+import { useWideLayout } from '../../hooks/useWideLayout';
+import type { RiskAnalysisResponse } from '../../types';
+import { riskLevel } from '../../utils/riskPresentation';
 
 type ScoreKey = 'volatilityScore' | 'trendScore' | 'volumeScore';
-type RiskScoreData = Pick<RiskAnalysisResponse, 'compositeRiskScore' | ScoreKey>;
+const COMPONENTS = [
+  { key: 'volatilityScore', label: 'Volatility risk', icon: Activity, tone: 'tone-violet' },
+  { key: 'trendScore', label: 'Trend risk', icon: TrendingUp, tone: 'tone-blue' },
+  { key: 'volumeScore', label: 'Volume risk', icon: BarChart3, tone: 'tone-cyan' },
+] satisfies { key: ScoreKey; label: string; icon: typeof Activity; tone: string }[];
 
-interface RiskScoreCardProps {
-  data: RiskScoreData;
-  asset?: Asset;
-  currentPrice?: number;
-}
-
-const GAUGE_SEGMENTS = [
-  { color: '#22c55e', offset: 0 },
-  { color: '#a3e635', offset: -25.54 },
-  { color: '#facc15', offset: -51.08 },
-  { color: '#fb923c', offset: -76.62 },
-  { color: '#ef4444', offset: -102.16 },
-] as const;
-
-const THEMES = {
-  purple: {
-    icon: 'bg-purple-500/20 text-purple-400',
-    fill: 'bg-purple-500',
-    thumb: 'bg-purple-400',
-    text: 'text-purple-400',
-  },
-  blue: {
-    icon: 'bg-blue-500/20 text-blue-400',
-    fill: 'bg-blue-500',
-    thumb: 'bg-blue-400',
-    text: 'text-blue-400',
-  },
-  orange: {
-    icon: 'bg-orange-500/20 text-orange-400',
-    fill: 'bg-orange-500',
-    thumb: 'bg-orange-400',
-    text: 'text-orange-400',
-  },
-} as const;
-
-const SCORE_METRICS: Array<{
-  key: ScoreKey;
-  label: string;
-  description: string;
-  theme: keyof typeof THEMES;
-  icon: ComponentType<{ size?: number }>;
-  delay: number;
-}> = [
-  {
-    key: 'volatilityScore',
-    label: 'Volatility Risk',
-    description: 'Price fluctuation and volatility analysis',
-    theme: 'purple',
-    icon: Activity,
-    delay: 0,
-  },
-  {
-    key: 'trendScore',
-    label: 'Trend Risk',
-    description: 'Market trend and momentum analysis',
-    theme: 'blue',
-    icon: TrendingUp,
-    delay: 75,
-  },
-  {
-    key: 'volumeScore',
-    label: 'Volume Risk',
-    description: 'Trading volume and liquidity analysis',
-    theme: 'orange',
-    icon: BarChart2,
-    delay: 150,
-  },
-];
-
-const getLevelText = (score: number) => {
-  if (score < 30) return 'Low';
-  if (score < 70) return 'Medium';
-  return 'High';
-};
-
-const getRiskLevel = (score: number) => {
-  if (score < 30) {
-    return { text: 'Low Risk', scoreClass: 'text-green-400', badgeClass: 'bg-green-400/20' };
-  }
-  if (score < 70) {
-    return { text: 'Medium Risk', scoreClass: 'text-yellow-400', badgeClass: 'bg-yellow-400/20' };
-  }
-  return { text: 'High Risk', scoreClass: 'text-red-400', badgeClass: 'bg-red-400/20' };
-};
-
-const RiskGauge = memo(function RiskGauge({ score }: { score: number }) {
-  const animatedScore = useAnimatedNumber(score, 700);
-  const rotation = (animatedScore / 100) * 180 - 90;
-
-  return (
-    <div className="relative w-36 h-20 flex items-end justify-center" aria-hidden="true">
-      <svg
-        viewBox="0 0 100 55"
-        className="absolute bottom-0 w-full h-full overflow-visible drop-shadow-md"
-      >
-        <path d="M 10 50 A 40 40 0 0 1 90 50" fill="none" stroke="#374151" strokeWidth="10" />
-        {GAUGE_SEGMENTS.map(segment => (
-          <path
-            key={segment.color}
-            d="M 10 50 A 40 40 0 0 1 90 50"
-            fill="none"
-            stroke={segment.color}
-            strokeWidth="10"
-            strokeDasharray="23.5 105"
-            strokeDashoffset={segment.offset}
-          />
-        ))}
-        <g style={{ transform: `rotate(${rotation}deg)`, transformOrigin: '50px 50px' }}>
-          <polygon points="48.5,50 51.5,50 50,14" fill="#f3f4f6" />
-          <circle cx="50" cy="50" r="4" fill="#f3f4f6" />
-          <circle cx="50" cy="50" r="1.5" fill="#1f2937" />
-        </g>
-      </svg>
-    </div>
-  );
-});
-
-const AnimatedCompositeScore = memo(function AnimatedCompositeScore({ score }: { score: number }) {
-  return <>{useAnimatedNumber(score, 700).toFixed(1)}</>;
-});
-
-const ScoreBar = memo(function ScoreBar({
-  label,
-  description,
-  score,
-  themeKey,
-  icon: Icon,
-  delay,
+export function RiskScoreCard({
+  data,
 }: {
-  label: string;
-  description: string;
-  score: number;
-  themeKey: keyof typeof THEMES;
-  icon: ComponentType<{ size?: number }>;
-  delay: number;
+  data: Pick<RiskAnalysisResponse, 'compositeRiskScore' | ScoreKey>;
 }) {
-  const animatedScore = useAnimatedNumber(score, 1_500, delay);
-  const theme = THEMES[themeKey];
-
+  const wide = useWideLayout();
+  const [expanded, setExpanded] = useState(false);
+  const detailId = useId();
+  const score = data.compositeRiskScore;
+  const level = riskLevel(score);
+  const angle = (score / 100) * Math.PI;
   return (
-    <div className="flex items-start sm:items-center gap-3 sm:gap-5 bg-gray-900/40 p-3 sm:p-5 rounded-2xl border border-gray-700/50 min-w-0">
-      <div className={`p-2.5 sm:p-3.5 rounded-xl shrink-0 ${theme.icon}`}>
-        <Icon size={24} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-white font-semibold text-base">{label}</p>
-        <p className="text-gray-400 text-sm mt-1">{description}</p>
-      </div>
-      <div className="flex-[2] hidden md:block mx-2 lg:mx-6 min-w-0">
-        <div className="w-full bg-gray-700/50 rounded-full h-3">
-          <div
-            className={`h-3 rounded-full relative ${theme.fill}`}
-            style={{ width: `${Math.min(100, Math.max(0, animatedScore))}%` }}
-          >
-            <div
-              className={`absolute right-0 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full shadow-md ${theme.thumb}`}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="text-right shrink-0 min-w-[58px] sm:min-w-[70px] flex flex-col items-end gap-1.5">
-        <span className={`text-xl sm:text-2xl font-bold leading-none ${theme.text}`}>
-          {animatedScore.toFixed(1)}
+    <section className="panel risk-panel" aria-labelledby="risk-heading">
+      <div className="flex items-center gap-3">
+        <span className="feature-icon tone-violet">
+          <ShieldCheck size={21} aria-hidden="true" />
         </span>
-        <span className={`text-xs font-semibold px-2 sm:px-3 py-1 rounded-full ${theme.icon}`}>
-          {getLevelText(score)}
-        </span>
-      </div>
-    </div>
-  );
-});
-
-export function RiskScoreCard({ data, asset, currentPrice }: RiskScoreCardProps) {
-  const riskLevel = getRiskLevel(data.compositeRiskScore);
-
-  return (
-    <section className="bg-gray-800 rounded-2xl p-4 sm:p-7 shadow-lg border border-gray-700 min-w-0">
-      <div className="flex items-start sm:items-center gap-3 sm:gap-4 mb-6 min-w-0">
-        {asset && <CryptoAssetIcon asset={asset} size="large" />}
-        <h2 className="text-xl font-bold text-white flex items-center gap-2 flex-wrap min-w-0">
-          <span>{asset ? asset.name : 'Risk Analysis'}</span>
-          {asset && <span className="text-gray-400 text-lg">({asset.ticker})</span>}
-          {currentPrice !== undefined && (
-            <span className="sm:ml-3 max-w-full px-3 py-1 text-sm sm:text-base font-bold bg-emerald-950/40 text-emerald-400 border border-emerald-500/25 rounded-xl font-mono tracking-tight shadow-inner break-all">
-              $
-              {currentPrice.toLocaleString(undefined, {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 8,
-              })}
-            </span>
-          )}
-        </h2>
-      </div>
-
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between mb-6 sm:mb-8 p-4 sm:p-5 bg-gray-900 rounded-xl min-w-0">
-        <div className="w-full sm:w-1/3">
-          <p className="text-gray-400 text-sm mb-1">Composite Risk Score</p>
-          <p className={`text-4xl font-bold ${riskLevel.scoreClass}`}>
-            <AnimatedCompositeScore score={data.compositeRiskScore} />
-          </p>
-        </div>
-        <div className="hidden sm:flex sm:w-1/3 justify-center">
-          <RiskGauge score={data.compositeRiskScore} />
-        </div>
-        <div className="w-full sm:w-1/3 flex justify-start sm:justify-end">
-          <div
-            className={`text-base sm:text-lg font-semibold px-4 sm:px-5 py-2 sm:py-2.5 rounded-full whitespace-nowrap ${riskLevel.scoreClass} ${riskLevel.badgeClass}`}
-          >
-            {riskLevel.text}
-          </div>
+        <div>
+          <h2 id="risk-heading" className="section-title">
+            Risk overview
+          </h2>
+          <p className="mt-0.5 text-xs text-muted">Composite risk score</p>
         </div>
       </div>
-
-      <div className="space-y-3 sm:space-y-5">
-        {SCORE_METRICS.map(metric => (
-          <ScoreBar
-            key={metric.key}
-            label={metric.label}
-            description={metric.description}
-            score={data[metric.key]}
-            themeKey={metric.theme}
-            icon={metric.icon}
-            delay={metric.delay}
+      <div className="risk-dial">
+        <svg viewBox="0 0 240 138" className="h-full w-full" aria-hidden="true">
+          <path
+            d="M 20 120 A 100 100 0 0 1 220 120"
+            fill="none"
+            stroke="var(--line)"
+            strokeWidth="12"
           />
-        ))}
+          <path
+            d="M 20 120 A 100 100 0 0 1 220 120"
+            pathLength="100"
+            fill="none"
+            stroke="var(--positive)"
+            strokeWidth="12"
+            strokeDasharray="29 71"
+          />
+          <path
+            d="M 20 120 A 100 100 0 0 1 220 120"
+            pathLength="100"
+            fill="none"
+            stroke="var(--warning)"
+            strokeWidth="12"
+            strokeDasharray="38 62"
+            strokeDashoffset="-31"
+          />
+          <path
+            d="M 20 120 A 100 100 0 0 1 220 120"
+            pathLength="100"
+            fill="none"
+            stroke="var(--negative)"
+            strokeWidth="12"
+            strokeDasharray="29 71"
+            strokeDashoffset="-71"
+          />
+          <path
+            d="M 36 120 A 84 84 0 0 1 204 120"
+            fill="none"
+            stroke="var(--line)"
+            strokeWidth="1"
+            strokeDasharray="2 6"
+          />
+          {level.valid && (
+            <circle
+              cx={120 - 100 * Math.cos(angle)}
+              cy={120 - 100 * Math.sin(angle)}
+              r="7"
+              fill="var(--ink)"
+              stroke="var(--panel)"
+              strokeWidth="4"
+            />
+          )}
+        </svg>
+        <div className="absolute inset-x-0 bottom-2 text-center">
+          <p
+            className={`text-[52px] font-semibold leading-none tracking-tight tabular-nums ${level.color}`}
+          >
+            {level.valid ? score.toFixed(1) : '—'}
+          </p>
+          <p className="mt-1 text-xs text-secondary">/100</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between text-xs text-muted">
+        <span>Low · 0</span>
+        <span className={`risk-badge ${level.color}`}>
+          <ShieldCheck size={13} aria-hidden="true" />
+          {level.label}
+        </span>
+        <span>100 · High</span>
+      </div>
+      <button
+        type="button"
+        className="mt-3 flex min-h-11 w-full items-center justify-between border-t border-line pt-2 text-sm font-medium text-secondary lg:hidden"
+        aria-expanded={wide || expanded}
+        aria-controls={detailId}
+        onClick={() => setExpanded(value => !value)}
+      >
+        Risk breakdown{' '}
+        <ChevronDown size={16} aria-hidden="true" className={expanded ? 'rotate-180' : ''} />
+      </button>
+      <div
+        id={detailId}
+        hidden={!wide && !expanded}
+        className="mt-3 space-y-3 lg:mt-5 lg:border-t lg:border-line lg:pt-4"
+      >
+        {COMPONENTS.map(({ key, label, icon: Icon, tone }) => {
+          const component = riskLevel(data[key]);
+          return (
+            <div key={key} className="flex items-center gap-3">
+              <span className={`component-icon ${tone}`}>
+                <Icon size={17} aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1 text-xs">
+                  <span className="text-secondary">{label}</span>
+                  <span className={`font-semibold tabular-nums ${component.color}`}>
+                    {component.valid ? data[key].toFixed(1) : '—'}
+                    <span className="font-normal text-muted"> /100</span>
+                    <span className="sr-only"> · {component.label}</span>
+                  </span>
+                </div>
+                <div className="h-1.5 rounded-full bg-line" aria-hidden="true">
+                  <div
+                    className={`h-full rounded-full ${component.fill}`}
+                    style={{ width: `${component.valid ? data[key] : 0}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );

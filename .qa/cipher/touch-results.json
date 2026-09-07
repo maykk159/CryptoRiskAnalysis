@@ -1,0 +1,15 @@
+[
+  {
+    "name": "touch-inspection-and-vertical-scroll",
+    "before": 675,
+    "after": 812,
+    "passed": true
+  },
+  {
+    "name": "200-percent-equivalent-reflow",
+    "cssViewport": 720,
+    "deviceScaleFactor": 2,
+    "passed": true,
+    "limitation": "Browser menu zoom itself is not automated; this checks equivalent reflow plus separate CSS zoom."
+  }
+]

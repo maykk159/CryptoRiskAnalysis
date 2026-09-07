@@ -1,5 +1,6 @@
-import { Activity, LineChart, Scale, Shield, TrendingDown, type LucideIcon } from 'lucide-react';
+import { Activity, Info, Scale, Shield, TrendingDown, type LucideIcon } from 'lucide-react';
 import type { RiskAnalysisResponse } from '../../types';
+import { formatMetric } from '../../utils/riskPresentation';
 
 type MetricKey =
   | 'downsideRisk'
@@ -7,123 +8,97 @@ type MetricKey =
   | 'sharpeRatio'
   | 'valueAtRisk95'
   | 'annualizedVolatility';
-
-interface AdvancedMetricsProps {
-  data: Pick<RiskAnalysisResponse, MetricKey>;
-}
-
-interface MetricDefinition {
+const METRICS: {
   key: MetricKey;
   label: string;
-  description: string;
-  title: string;
+  caption: string;
   icon: LucideIcon;
-  iconClass: string;
-  valueClass: string | ((value: number) => string);
-  format: (value: number) => string;
-  wide?: boolean;
-}
-
-const formatPercentage = (value: number) => `${value.toFixed(2)}%`;
-const formatLossPercentage = (value: number) => {
-  const magnitude = Math.abs(value).toFixed(2);
-  return magnitude === '0.00' ? '0.00%' : `-${magnitude}%`;
-};
-
-const METRICS: MetricDefinition[] = [
+  tone: string;
+  help: string;
+  kind?: 'loss' | 'ratio';
+}[] = [
   {
     key: 'downsideRisk',
-    label: 'Downside Risk',
-    description: 'Downside volatility only',
-    title: 'Volatility of negative returns only - measures downside risk',
     icon: TrendingDown,
-    iconClass: 'bg-purple-500/20 text-purple-400',
-    valueClass: 'text-white',
-    format: formatPercentage,
+    tone: 'tone-violet',
+    label: 'Downside Risk',
+    caption: 'Annualized downside deviation',
+    help: 'Annualized downside deviation relative to a 0% daily target. All daily return periods are included.',
   },
   {
     key: 'maxDrawdown',
-    label: 'Max Drawdown',
-    description: 'Worst-case decline',
-    title: 'Largest peak-to-trough decline in the period',
     icon: TrendingDown,
-    iconClass: 'bg-red-500/20 text-red-400',
-    valueClass: 'text-red-400',
-    format: formatLossPercentage,
+    tone: 'tone-red',
+    label: 'Max Drawdown',
+    caption: 'Largest historical decline',
+    kind: 'loss',
+    help: 'Largest peak-to-trough price decline within the selected historical period.',
   },
   {
     key: 'sharpeRatio',
-    label: 'Sharpe Ratio',
-    description: 'Risk-adjusted return',
-    title: 'Risk-adjusted return metric - higher is better',
     icon: Scale,
-    iconClass: 'bg-emerald-500/20 text-emerald-400',
-    valueClass: value =>
-      value >= 1 ? 'text-emerald-400' : value >= 0 ? 'text-yellow-400' : 'text-red-400',
-    format: value => value.toFixed(2),
+    tone: 'tone-green',
+    label: 'Sharpe Ratio',
+    caption: 'Annualized return / risk',
+    kind: 'ratio',
+    help: 'Annualized risk-adjusted return, using a 0% risk-free return assumption. This is a ratio, not a percentage.',
   },
   {
     key: 'valueAtRisk95',
-    label: 'VaR (95%)',
-    description: '95% confidence loss',
-    title: '95% confidence worst-case loss',
     icon: Shield,
-    iconClass: 'bg-orange-500/20 text-orange-400',
-    valueClass: 'text-orange-400',
-    format: formatLossPercentage,
+    tone: 'tone-amber',
+    label: 'VaR (95%)',
+    caption: 'Estimated daily loss',
+    kind: 'loss',
+    help: 'Historical daily loss estimate from the 5th percentile of daily returns. It is not a guaranteed maximum loss or a prediction of the worst future outcome.',
   },
   {
     key: 'annualizedVolatility',
-    label: 'Annualized Volatility',
-    description: 'Historical price volatility',
-    title: 'Standard deviation annualized',
     icon: Activity,
-    iconClass: 'bg-blue-500/20 text-blue-400',
-    valueClass: 'text-blue-400',
-    format: formatPercentage,
-    wide: true,
+    tone: 'tone-blue',
+    label: 'Annualized Volatility',
+    caption: 'Daily return variability',
+    help: 'Standard deviation of historical daily returns, annualized using 365 days.',
   },
 ];
 
-export function AdvancedMetrics({ data }: AdvancedMetricsProps) {
+export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, MetricKey> }) {
   return (
-    <section className="bg-gray-800 rounded-xl p-6 shadow-lg border border-gray-700">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="p-2.5 bg-indigo-500/20 rounded-xl text-indigo-400">
-          <LineChart size={24} aria-hidden="true" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-white">Advanced Metrics</h2>
-          <p className="text-gray-400 text-sm mt-0.5">
-            Comprehensive risk and performance analytics
-          </p>
-        </div>
+    <section aria-labelledby="metrics-heading" className="mt-6">
+      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-1">
+        <h2 id="metrics-heading" className="section-title">
+          Advanced Metrics
+        </h2>
+        <p className="text-xs text-muted">Based on the selected historical period</p>
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="metric-grid">
         {METRICS.map(metric => {
-          const value = data[metric.key];
-          const valueClass =
-            typeof metric.valueClass === 'function' ? metric.valueClass(value) : metric.valueClass;
           const Icon = metric.icon;
-
+          const value = data[metric.key];
+          const tone = !Number.isFinite(value)
+            ? 'tone-muted'
+            : metric.key === 'sharpeRatio' && value < 0
+              ? 'tone-red'
+              : metric.tone;
           return (
-            <div
-              key={metric.key}
-              className={`bg-gray-900 p-5 rounded-xl flex items-start gap-4 ${
-                metric.wide ? 'md:col-span-2' : ''
-              }`}
-              title={metric.title}
-            >
-              <div className={`p-3 rounded-xl shrink-0 ${metric.iconClass}`}>
-                <Icon size={24} aria-hidden="true" />
+            <article key={metric.key} className={`metric-item ${tone}`}>
+              <div className="mb-3 flex items-start justify-between gap-2">
+                <span className="feature-icon">
+                  <Icon size={21} aria-hidden="true" />
+                </span>
+                <details className="metric-help">
+                  <summary aria-label={`About ${metric.label}`}>
+                    <Info size={16} aria-hidden="true" />
+                  </summary>
+                  <p className="metric-help-content">{metric.help}</p>
+                </details>
               </div>
-              <div>
-                <p className="text-gray-400 text-sm font-medium mb-1">{metric.label}</p>
-                <p className={`text-2xl font-bold ${valueClass}`}>{metric.format(value)}</p>
-                <p className="text-gray-400 text-xs mt-1">{metric.description}</p>
-              </div>
-            </div>
+              <h3 className="text-[13px] font-medium text-secondary">{metric.label}</h3>
+              <p className="metric-value mt-2 break-words text-[30px] font-semibold leading-tight tabular-nums tracking-tight">
+                {formatMetric(value, metric.kind)}
+              </p>
+              <p className="mt-2 text-xs text-muted">{metric.caption}</p>
+            </article>
           );
         })}
       </div>

@@ -2,59 +2,263 @@
 @tailwind components;
 @tailwind utilities;
 
-.price-chart-line {
-  /* Match the SVG pathLength so the animation covers the entire line at any size. */
-  stroke-dasharray: 1;
-  stroke-dashoffset: 1;
-  animation: draw-price-line 1.2s ease-out forwards;
-}
-
-.price-chart-area {
-  animation: reveal-price-area 0.6s ease-out forwards;
-}
-
-@keyframes draw-price-line {
-  to {
-    stroke-dashoffset: 0;
+@layer base {
+  :root {
+    color-scheme: dark;
+    --canvas: #0b1018;
+    --panel: #121a26;
+    --raised: #192436;
+    --line: #29374b;
+    --control: #607493;
+    --ink: #edf2fa;
+    --secondary: #acb9cd;
+    --muted: #8b9bb3;
+    --accent: #9ab1ff;
+    --violet: #bea7ff;
+    --cyan: #70d7e7;
+    --selection: #23345a;
+    --positive: #57d3a5;
+    --warning: #f2c66d;
+    --negative: #f1808b;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-synthesis: none;
+    background: var(--canvas);
+    color: var(--ink);
+  }
+  body {
+    margin: 0;
+    min-width: 320px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--control) var(--panel);
+  }
+  button,
+  input,
+  summary {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  input {
+    font: inherit;
+  }
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  :where(button, input, summary, a, svg[tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 4px;
+  }
+  ::selection {
+    background: var(--selection);
+    color: var(--ink);
   }
 }
 
-@keyframes reveal-price-area {
-  from {
-    opacity: 0;
+@layer components {
+  .panel {
+    @apply min-w-0 rounded-2xl border border-line bg-panel p-4 sm:p-6;
+  }
+  .section-title {
+    @apply text-base font-semibold tracking-tight text-ink sm:text-lg;
+  }
+  .control-button {
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-control bg-panel px-3 text-sm font-medium text-secondary transition-colors;
+  }
+  .control-button:hover:enabled {
+    @apply bg-raised text-ink;
+  }
+  .control-button:active:enabled {
+    @apply bg-selection;
+  }
+  .field-label {
+    @apply mb-2 block text-xs font-medium text-secondary;
+  }
+  .analysis-grid {
+    @apply grid min-w-0 grid-cols-1 items-start gap-4 lg:gap-6;
+  }
+  .chart-panel {
+    @apply panel;
+  }
+  .chart-canvas {
+    height: 280px;
+  }
+  .metric-grid {
+    @apply grid grid-cols-1 items-start gap-3 min-[380px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5;
+  }
+  .metric-item {
+    @apply min-w-0 rounded-xl border border-line bg-panel p-4;
+  }
+  .metric-item summary {
+    @apply flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 text-xs font-medium text-secondary;
+  }
+  .metric-item summary::-webkit-details-marker {
+    display: none;
+  }
+  .metric-item details[open] summary {
+    @apply text-accent;
+  }
+  .skeleton {
+    @apply rounded-md bg-raised motion-safe:animate-pulse;
   }
 }
 
+@media (min-width: 1024px) {
+  .analysis-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+  /* Keep the risk context first in reading order; its disclosure is mobile-only. */
+  .risk-panel {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .chart-panel {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .chart-canvas {
+    height: 310px;
+  }
+}
+
+/* A more expressive analytical surface, with color tied to metric identity and risk. */
+@layer components {
+  .panel {
+    background: linear-gradient(145deg, #172235 0%, var(--panel) 65%);
+    box-shadow:
+      0 8px 24px #00000018,
+      inset 0 1px 0 #ffffff05;
+    border-color: #30405a;
+  }
+  .brand-mark {
+    border: 1px solid #647ee34d;
+    border-radius: 12px;
+    padding: 5px;
+    background: #23345a;
+    box-shadow: 0 4px 16px #536bd526;
+  }
+  .analysis-toolbar {
+    @apply rounded-xl border border-line bg-panel p-3 sm:p-4;
+  }
+  .asset-summary {
+    @apply rounded-2xl border border-line p-4 sm:px-6 sm:py-5;
+    background: linear-gradient(110deg, #18253b 0%, #121a26 55%, #1b2540 100%);
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .asset-icon-ring {
+    @apply inline-flex shrink-0 rounded-full border border-control p-1.5;
+    background: #ffffff06;
+  }
+  .tone-blue {
+    --tone: var(--accent);
+  }
+  .tone-violet {
+    --tone: var(--violet);
+  }
+  .tone-cyan {
+    --tone: var(--cyan);
+  }
+  .tone-green {
+    --tone: var(--positive);
+  }
+  .tone-red {
+    --tone: var(--negative);
+  }
+  .tone-amber {
+    --tone: var(--warning);
+  }
+  .tone-muted {
+    --tone: var(--muted);
+  }
+  .feature-icon,
+  .component-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--tone, var(--accent));
+    border: 1px solid color-mix(in srgb, var(--tone, var(--accent)) 25%, transparent);
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--tone, var(--accent)) 17%, transparent),
+      color-mix(in srgb, var(--tone, var(--accent)) 5%, transparent)
+    );
+  }
+  .feature-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+  }
+  .component-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+  }
+  .risk-dial {
+    position: relative;
+    margin: 16px auto 0;
+    width: 240px;
+    max-width: 100%;
+    height: 138px;
+  }
+  .risk-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold;
+    background: color-mix(in srgb, currentColor 10%, transparent);
+    border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  }
+  .metric-item {
+    position: relative;
+    border-top: 2px solid color-mix(in srgb, var(--tone, var(--accent)) 65%, var(--line));
+    background: linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--tone, var(--accent)) 7%, var(--panel)),
+      var(--panel) 75%
+    );
+    box-shadow: 0 6px 18px #00000012;
+    transition:
+      border-color 160ms ease,
+      box-shadow 160ms ease;
+  }
+  .metric-item:hover,
+  .metric-item:focus-within {
+    border-color: color-mix(in srgb, var(--tone, var(--accent)) 65%, var(--line));
+    box-shadow: 0 8px 24px #00000024;
+  }
+  .metric-value {
+    color: var(--tone, var(--ink));
+  }
+  .metric-help summary {
+    @apply flex h-11 w-11 items-center justify-center rounded-lg border border-transparent text-muted;
+    min-height: 44px;
+  }
+  .metric-help summary:hover,
+  .metric-help[open] summary {
+    @apply border-line bg-raised text-ink;
+  }
+  .metric-help-content {
+    @apply absolute left-3 right-3 top-[68px] z-20 rounded-xl border border-control bg-raised p-3 text-xs leading-relaxed text-secondary shadow-xl;
+  }
+  .price-chart-line {
+    filter: drop-shadow(0 2px 4px #7997ff24);
+  }
+  .chart-canvas {
+    height: 290px;
+  }
+}
+@media (min-width: 1024px) {
+  .chart-canvas {
+    height: 326px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .price-chart-line,
-  .price-chart-area {
-    animation: none;
-    stroke-dashoffset: 0;
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
   }
-}
-
-/* Custom Scrollbar for Dark Theme */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #1f2937; /* Tailwind gray-800 */
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #4b5563; /* Tailwind gray-600 */
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #6b7280; /* Tailwind gray-500 */
-}
-
-/* For Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #4b5563 #1f2937;
 }

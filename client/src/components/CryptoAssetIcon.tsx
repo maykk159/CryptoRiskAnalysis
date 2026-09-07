@@ -5,39 +5,28 @@ interface CryptoAssetIconProps {
   asset: Pick<Asset, 'icon' | 'name' | 'ticker'>;
   size?: 'small' | 'large';
 }
-
-const sizeClasses = {
-  small: {
-    image: 'w-6 h-6 object-contain shrink-0',
-    fallback: 'w-6 h-6 text-xs',
-  },
-  large: {
-    image: 'w-12 h-12 rounded-full object-contain bg-white p-1 shrink-0',
-    fallback: 'w-12 h-12 text-lg border-2 border-gray-600',
-  },
-} as const;
-
 export function CryptoAssetIcon({ asset, size = 'small' }: CryptoAssetIconProps) {
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
-  const classes = sizeClasses[size];
-
-  if (failedUrl === asset.icon) {
-    return (
-      <span
-        className={`${classes.fallback} rounded-full bg-gray-700 flex items-center justify-center font-bold text-gray-300 shrink-0`}
-        aria-label={`${asset.name} icon fallback`}
-      >
-        {asset.ticker.slice(0, 2).toUpperCase()}
-      </span>
-    );
-  }
-
+  const ready = loadedUrl === asset.icon && failedUrl !== asset.icon;
   return (
-    <img
-      src={asset.icon}
-      alt={`${asset.name} icon`}
-      className={classes.image}
-      onError={() => setFailedUrl(asset.icon)}
-    />
+    <span
+      className={`relative inline-flex shrink-0 items-center justify-center rounded-full bg-raised font-semibold text-secondary ${size === 'large' ? 'h-12 w-12 text-base' : 'h-6 w-6 text-[10px]'}`}
+    >
+      {!ready && (
+        <span aria-label={`${asset.name} icon fallback`}>
+          {asset.ticker.slice(0, 2).toUpperCase()}
+        </span>
+      )}
+      {failedUrl !== asset.icon && (
+        <img
+          src={asset.icon}
+          alt={ready ? `${asset.name} icon` : ''}
+          className={`absolute inset-0 h-full w-full rounded-full object-contain ${ready ? 'opacity-100' : 'opacity-0'}`}
+          onLoad={() => setLoadedUrl(asset.icon)}
+          onError={() => setFailedUrl(asset.icon)}
+        />
+      )}
+    </span>
   );
 }

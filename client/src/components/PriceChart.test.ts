@@ -9,7 +9,7 @@ describe('formatUsdPrice', () => {
   });
 
   it('uses a compact number of decimals for regular prices', () => {
-    expect(formatUsdPrice(1234.5678)).toBe('$1,234.568');
+    expect(formatUsdPrice(1234.5678)).toBe('$1,234.57');
   });
 });
 
@@ -43,5 +43,45 @@ describe('PriceChart UTC date formatting', () => {
 
   it('keeps a UTC-midnight point on the same calendar day in the tooltip', () => {
     expect(formatUtcTooltipDate(utcMidnight)).toBe('Fri, Sep 4, 2026');
+  });
+});
+
+describe('price edge cases', () => {
+  it('distinguishes zero and invalid values, and keeps tiny positive prices', () => {
+    expect(formatUsdPrice(0)).toBe('$0.00');
+    for (const value of [undefined, null, NaN, Infinity, -1])
+      expect(formatUsdPrice(value)).toBe('Unavailable');
+    expect(formatUsdPrice(1e-12)).not.toBe('$0.00');
+    expect(formatUsdPrice(123456789, 'axis')).toBe('$123.5M');
+  });
+  it.each([0, 0.00001234, 100, 1e12])('bounds flat series at %s', price => {
+    const model = createChartModel(
+      [
+        { timestamp: 1, price },
+        { timestamp: 2, price },
+      ],
+      280,
+      280
+    )!;
+    for (const point of model.points) {
+      expect(Number.isFinite(point.y)).toBe(true);
+      expect(point.y).toBeGreaterThanOrEqual(model.bounds.top);
+      expect(point.y).toBeLessThanOrEqual(model.bounds.height - model.bounds.bottom);
+    }
+    expect(model.yTicks.every(tick => tick.value >= 0)).toBe(true);
+  });
+  it('centers a single point and filters invalid timestamps and negative prices', () => {
+    const model = createChartModel(
+      [
+        { timestamp: 1, price: 10 },
+        { timestamp: 1e20, price: 20 },
+        { timestamp: 2, price: -1 },
+      ],
+      280,
+      280
+    )!;
+    expect(model.points).toHaveLength(1);
+    expect(model.points[0].x).toBeGreaterThan(model.bounds.left);
+    expect(createChartModel([])).toBeNull();
   });
 });

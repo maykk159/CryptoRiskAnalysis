@@ -40,24 +40,30 @@ export const createChartModel = (
   width = 1_000,
   height = 360
 ): ChartModel | null => {
-  const validData = data.filter(
-    point => Number.isFinite(point.timestamp) && Number.isFinite(point.price)
-  );
+  const validData = data
+    .filter(
+      point =>
+        Number.isFinite(point.timestamp) &&
+        Math.abs(point.timestamp) <= 8.64e15 &&
+        Number.isFinite(point.price) &&
+        point.price >= 0
+    )
+    .sort((a, b) => a.timestamp - b.timestamp);
   if (validData.length === 0) return null;
 
   const prices = validData.map(point => point.price);
   const timestamps = validData.map(point => point.timestamp);
   const minimumPrice = Math.min(...prices);
   const maximumPrice = Math.max(...prices);
-  const priceRange = maximumPrice - minimumPrice || Math.max(Math.abs(maximumPrice) * 0.02, 1);
-  const yMinimum = minimumPrice - priceRange * 0.08;
+  const priceRange = maximumPrice - minimumPrice || Math.abs(maximumPrice) * 0.02 || 1;
+  const yMinimum = Math.max(0, minimumPrice - priceRange * 0.08);
   const yMaximum = maximumPrice + priceRange * 0.08;
   const timestampMinimum = Math.min(...timestamps);
   const timestampRange = Math.max(Math.max(...timestamps) - timestampMinimum, 1);
   const bounds = {
     width,
     height,
-    left: width < 500 ? 62 : 92,
+    left: 88,
     right: 18,
     top: 18,
     bottom: 42,
@@ -67,7 +73,10 @@ export const createChartModel = (
 
   const points = validData.map(point => ({
     ...point,
-    x: bounds.left + ((point.timestamp - timestampMinimum) / timestampRange) * plotWidth,
+    x:
+      bounds.left +
+      (validData.length === 1 ? 0.5 : (point.timestamp - timestampMinimum) / timestampRange) *
+        plotWidth,
     y: bounds.top + ((yMaximum - point.price) / (yMaximum - yMinimum)) * plotHeight,
   }));
   const linePath = points
