@@ -71,9 +71,11 @@ export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, Met
       const target = event.target;
       if (!(target instanceof Node)) return;
 
-      sectionRef.current?.querySelectorAll<HTMLDetailsElement>('.metric-help[open]').forEach(help => {
-        if (!help.contains(target)) help.removeAttribute('open');
-      });
+      sectionRef.current
+        ?.querySelectorAll<HTMLDetailsElement>('.metric-help[open]')
+        .forEach(help => {
+          if (!help.contains(target)) help.removeAttribute('open');
+        });
     };
 
     document.addEventListener('pointerdown', closeHelpOnOutsideClick);
