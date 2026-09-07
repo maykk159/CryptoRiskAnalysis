@@ -1,4 +1,5 @@
 import { Activity, Info, Scale, Shield, TrendingDown, type LucideIcon } from 'lucide-react';
+import { useEffect, useRef } from 'react';
 import type { RiskAnalysisResponse } from '../../types';
 import { formatMetric } from '../../utils/riskPresentation';
 
@@ -63,8 +64,26 @@ const METRICS: {
 ];
 
 export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, MetricKey> }) {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const closeHelpOnOutsideClick = (event: PointerEvent) => {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+
+      sectionRef.current
+        ?.querySelectorAll<HTMLDetailsElement>('.metric-help[open]')
+        .forEach(help => {
+          if (!help.contains(target)) help.removeAttribute('open');
+        });
+    };
+
+    document.addEventListener('pointerdown', closeHelpOnOutsideClick);
+    return () => document.removeEventListener('pointerdown', closeHelpOnOutsideClick);
+  }, []);
+
   return (
-    <section aria-labelledby="metrics-heading" className="mt-6">
+    <section ref={sectionRef} aria-labelledby="metrics-heading" className="mt-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-1">
         <h2 id="metrics-heading" className="section-title">
           Advanced Metrics
