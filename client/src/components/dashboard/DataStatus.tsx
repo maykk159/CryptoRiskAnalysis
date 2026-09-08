@@ -60,7 +60,7 @@ export function DataStatus({
         />
         <span>
           {label}
-          <span className="sr-only"> · {announcement}</span>
+          {announcement ? <span className="sr-only"> · {announcement}</span> : null}
         </span>
       </p>
       <p className="mt-1 text-muted">

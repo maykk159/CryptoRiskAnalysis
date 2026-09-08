@@ -110,6 +110,7 @@ describe('Dashboard loading and recovery', () => {
     expect((await screen.findByRole('alert')).textContent).toContain(
       'Failed to connect to the server'
     );
+    expect(screen.getByRole('status').textContent).toBe('Unable to fetch');
     await user.click(screen.getByRole('button', { name: 'Try again' }));
 
     await waitFor(() => expect(getAnalysis).toHaveBeenCalledTimes(2));

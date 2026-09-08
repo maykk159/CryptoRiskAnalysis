@@ -34,6 +34,18 @@ namespace CryptoRiskAnalysis.API.Controllers
         {
             _logger.LogInformation("Received risk analysis request for {AssetId} over {Days} days", assetId, days);
 
+            if (string.IsNullOrWhiteSpace(assetId))
+            {
+                _logger.LogWarning("Risk analysis request received with empty or null assetId.");
+                return BadRequest(new ApiResponse<RiskAnalysisResponseDto>("Asset ID boş olamaz."));
+            }
+
+            if (assetId.Length > 200)
+            {
+                _logger.LogWarning("Risk analysis request received with oversized assetId (length={Length}).", assetId.Length);
+                return BadRequest(new ApiResponse<RiskAnalysisResponseDto>("Asset ID çok uzun."));
+            }
+
             // Validate days parameter - only allow 7, 30, or 90
             if (days != 7 && days != 30 && days != 90)
             {

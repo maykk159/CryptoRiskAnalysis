@@ -11,6 +11,12 @@ describe('formatUsdPrice', () => {
   it('uses a compact number of decimals for regular prices', () => {
     expect(formatUsdPrice(1234.5678)).toBe('$1,234.57');
   });
+
+  it('preserves minimum two decimals for sub-dollar prices without dropping trailing zeros', () => {
+    expect(formatUsdPrice(0.5)).toBe('$0.50');
+    expect(formatUsdPrice(0.1)).toBe('$0.10');
+    expect(formatUsdPrice(0.05)).toBe('$0.05');
+  });
 });
 
 describe('createChartModel', () => {

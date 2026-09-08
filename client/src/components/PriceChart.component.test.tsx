@@ -27,6 +27,15 @@ describe('PriceChart interaction', () => {
     render(<PriceChart data={[]} timeRange={7} />);
     expect(screen.getByRole('status').textContent).toContain('No price history');
   });
+
+  it('updates inspection on touch pointer move', () => {
+    render(<PriceChart data={data} timeRange={30} />);
+    const chart = screen.getByRole('img', { name: /30-day price chart/i });
+
+    fireEvent.pointerMove(chart, { clientX: 100, pointerType: 'touch' });
+    expect(screen.getByText('Thu, Sep 3, 2026')).toBeTruthy();
+    expect(screen.getByText('$100.00')).toBeTruthy();
+  });
 });
 
 it('clears old inspection when the series changes and preserves it for the same values', () => {
