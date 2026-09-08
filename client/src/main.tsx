@@ -2,7 +2,7 @@ import { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Dashboard } from './components/Dashboard';
-import { ApiRequestError } from './services/api.ts';
+import { ApiRequestError } from './services/api';
 import './index.css';
 
 const shouldRetryQuery = (failureCount: number, error: unknown) => {

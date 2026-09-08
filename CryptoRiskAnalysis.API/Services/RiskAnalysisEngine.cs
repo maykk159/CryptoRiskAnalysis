@@ -220,10 +220,15 @@ namespace CryptoRiskAnalysis.API.Services
             // Context-aware volume analysis
 
             // 1. Selling pressure: Declining price + High volume = PANIC
+            // Formula blends a normal-volume component with a panic bonus so there is no
+            // abrupt score jump at the -5 % price-change threshold.
+            //   normalComponent  ≈ 40 when volumeRatio = 1.5  (matches Normal-dal at boundary)
+            //   panicBonus       = 0 at -5 %, rises linearly to 60 at -25 % and beyond
             if (priceChange < -0.05m && volumeRatio > 1.5m)
             {
-                // Strong selling pressure
-                score = Math.Min(100, 70 + (volumeRatio - 1.5m) * 20);
+                var normalComponent = 30m + Math.Abs(volumeRatio - 1.0m) * 20m;
+                var panicBonus = Math.Min(60m, (-priceChange - 0.05m) * 300m);
+                score = Math.Min(100, normalComponent + panicBonus);
             }
             // 2. Weak rally: Rising price + Low volume = UNSUSTAINABLE
             else if (priceChange > 0.05m && volumeRatio < 0.5m)
@@ -281,7 +286,7 @@ namespace CryptoRiskAnalysis.API.Services
                 volumeWeight = 0.25m;
             }
             // When trend is extreme, it's critical
-            else if (trendScore > HIGH_RISK_THRESHOLD + 10)
+            else if (trendScore > HIGH_RISK_THRESHOLD)
             {
                 volWeight = 0.30m;
                 trendWeight = 0.45m;
@@ -327,6 +332,13 @@ namespace CryptoRiskAnalysis.API.Services
         /// <summary>
         /// Calculate downside deviation against a 0% daily target return.
         /// Returns at or above the target contribute zero; all periods remain in the denominator.
+        /// <para>
+        /// Denominator: N (population), not N-1 (sample). This follows the Sortino-ratio
+        /// convention used by Morningstar and most portfolio analytics vendors, where the full
+        /// observation count is used regardless of how many periods had a shortfall.
+        /// This differs intentionally from <see cref="CalculateStdDev"/>, which uses N-1 for
+        /// general sample-based volatility estimates (Sharpe ratio, annualized volatility).
+        /// </para>
         /// </summary>
         private decimal CalculateDownsideRisk(List<double> returns)
         {
@@ -337,6 +349,7 @@ namespace CryptoRiskAnalysis.API.Services
                 var shortfall = Math.Min(0d, returnValue - DOWNSIDE_TARGET_RETURN);
                 return shortfall * shortfall;
             });
+            // Population denominator (N): standard for Sortino-style downside deviation.
             var downsideDeviation = Math.Sqrt(sumOfSquaredShortfalls / returns.Count);
 
             // Daily data is annualized with 365 periods because crypto trades every day.
@@ -429,15 +442,20 @@ namespace CryptoRiskAnalysis.API.Services
         }
 
         /// <summary>
-        /// Calculate sample standard deviation (Bessel's correction: N-1)
-        /// Shared helper to avoid code duplication across risk calculations
+        /// Calculate sample standard deviation using Bessel's correction (N-1 denominator).
+        /// Used for <see cref="CalculateSharpeRatio"/> and <see cref="CalculateAnnualizedVolatility"/>
+        /// where unbiased estimation of the population σ from a sample is appropriate.
+        /// <para>
+        /// Note: <see cref="CalculateDownsideRisk"/> uses a population denominator (N) intentionally,
+        /// following the Sortino-ratio convention. The two methods are therefore not interchangeable.
+        /// </para>
         /// </summary>
         private static double CalculateStdDev(List<double> values)
         {
             if (values == null || values.Count < 2) return 0;
             var mean = values.Average();
             var sumOfSquares = values.Sum(v => Math.Pow(v - mean, 2));
-            var variance = sumOfSquares / (values.Count - 1);
+            var variance = sumOfSquares / (values.Count - 1); // N-1: sample (Bessel's correction)
             return Math.Sqrt(variance);
         }
     }
