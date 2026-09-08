@@ -46,4 +46,20 @@ describe('AdvancedMetrics help', () => {
 
     expect(help?.hasAttribute('open')).toBe(true);
   });
+
+  it('closes an open explanation when the user presses Escape', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<AdvancedMetrics data={metrics} />);
+
+    const helpButton = container.querySelector<HTMLElement>(
+      'summary[aria-label="About Downside Risk"]'
+    );
+    const help = helpButton?.closest('details');
+
+    await user.click(helpButton!);
+    expect(help?.hasAttribute('open')).toBe(true);
+
+    await user.keyboard('{Escape}');
+    expect(help?.hasAttribute('open')).toBe(false);
+  });
 });

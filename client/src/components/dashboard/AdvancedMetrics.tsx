@@ -78,8 +78,20 @@ export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, Met
         });
     };
 
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        sectionRef.current
+          ?.querySelectorAll<HTMLDetailsElement>('.metric-help[open]')
+          .forEach(help => help.removeAttribute('open'));
+      }
+    };
+
     document.addEventListener('pointerdown', closeHelpOnOutsideClick);
-    return () => document.removeEventListener('pointerdown', closeHelpOnOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', closeHelpOnOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   return (
