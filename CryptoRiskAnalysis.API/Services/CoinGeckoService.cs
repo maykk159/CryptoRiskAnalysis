@@ -17,6 +17,8 @@ namespace CryptoRiskAnalysis.API.Services
         private const int CacheDurationSeconds = 60;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
+        private enum MarketField { Price, Volume }
+
         public CoinGeckoService(
             HttpClient httpClient,
             IMemoryCache cache,
@@ -61,9 +63,8 @@ namespace CryptoRiskAnalysis.API.Services
 
             _logger.LogInformation("CoinGecko Cache MISS for {AssetId} — fetching from API", assetId);
 
-            // Polly handles retries on 429 and transient errors — no manual loop needed
             // Request one extra day because CoinGecko may include today's still-open UTC candle.
-            var providerDays = (long)days + 1;
+            var providerDays = days + 1;
             HttpResponseMessage response;
             try
             {
@@ -106,10 +107,10 @@ namespace CryptoRiskAnalysis.API.Services
                 var currentPrice = ReadCurrentPrice(data.Prices);
                 // CoinGecko can append a live intraday point even when daily granularity is
                 // requested. Keep UTC-midnight daily points and completed previous days only.
-                var normalizedPrices = NormalizeCompletedDailyValues(data.Prices, "price")
+                var normalizedPrices = NormalizeCompletedDailyValues(data.Prices, MarketField.Price)
                     .TakeLast(days)
                     .ToList();
-                var normalizedVolumes = NormalizeCompletedDailyValues(data.Total_Volumes, "volume")
+                var normalizedVolumes = NormalizeCompletedDailyValues(data.Total_Volumes, MarketField.Volume)
                     .TakeLast(days)
                     .ToList();
 
@@ -180,8 +181,9 @@ namespace CryptoRiskAnalysis.API.Services
 
         private static IEnumerable<DailyValue> NormalizeCompletedDailyValues(
             IEnumerable<List<double>> values,
-            string fieldName)
+            MarketField field)
         {
+            var fieldName = field.ToString().ToLowerInvariant(); // used only in error messages
             var todayUtc = DateTime.UtcNow.Date;
             var parsedValues = new List<DailyValue>();
 
@@ -203,9 +205,9 @@ namespace CryptoRiskAnalysis.API.Services
                     var date = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.Date;
                     var numericValue = checked((decimal)value[1]);
 
-                    if (fieldName == "price" && numericValue <= 0)
+                    if (field == MarketField.Price && numericValue <= 0)
                         throw new MarketDataProviderException("CoinGecko", "a price observation was zero or negative.");
-                    if (fieldName == "volume" && numericValue < 0)
+                    if (field == MarketField.Volume && numericValue < 0)
                         throw new MarketDataProviderException("CoinGecko", "a volume observation was negative.");
 
                     // Today's UTC candle is still open, including a point timestamped at midnight.

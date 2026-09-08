@@ -13,9 +13,17 @@ export const formatUsdPrice = (
     );
   }
   if (value > 0 && value < 1) {
-    return (
-      '$' + value.toLocaleString('en-US', { maximumSignificantDigits: mode === 'axis' ? 3 : 6 })
-    );
+    const formatted = value.toLocaleString('en-US', {
+      maximumSignificantDigits: mode === 'axis' ? 3 : 6,
+    });
+    const parts = formatted.split('.');
+    if (parts.length === 1) {
+      return '$' + formatted + '.00';
+    }
+    if (parts[1].length < 2) {
+      return '$' + formatted + '0'.repeat(2 - parts[1].length);
+    }
+    return '$' + formatted;
   }
   return (
     '$' + value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })

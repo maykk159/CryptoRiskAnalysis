@@ -109,9 +109,7 @@ export function PriceChart({ data, timeRange }: PriceChartProps) {
               tabIndex={0}
               aria-label={`${timeRange}-day price chart. Use left and right arrow keys to inspect values.`}
               onPointerDown={handlePointer}
-              onPointerMove={event => {
-                if (event.pointerType !== 'touch') handlePointer(event);
-              }}
+              onPointerMove={handlePointer}
               onPointerLeave={event => {
                 if (event.pointerType !== 'touch' && !inspection?.keyboard) setInspection(null);
               }}

@@ -150,7 +150,7 @@ namespace CryptoRiskAnalysis.API.Extensions
             options.Retry.Delay = TimeSpan.FromSeconds(2);
             options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
-            options.CircuitBreaker.FailureRatio = 1.0;
+            options.CircuitBreaker.FailureRatio = 0.5;
             options.CircuitBreaker.MinimumThroughput = 5;
             options.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
             options.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
