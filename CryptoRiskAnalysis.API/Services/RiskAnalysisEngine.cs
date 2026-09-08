@@ -227,7 +227,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (priceChange < -0.05m && volumeRatio > 1.5m)
             {
                 var normalComponent = 30m + Math.Abs(volumeRatio - 1.0m) * 20m;
-                var panicBonus      = Math.Min(60m, (-priceChange - 0.05m) * 300m);
+                var panicBonus = Math.Min(60m, (-priceChange - 0.05m) * 300m);
                 score = Math.Min(100, normalComponent + panicBonus);
             }
             // 2. Weak rally: Rising price + Low volume = UNSUSTAINABLE
