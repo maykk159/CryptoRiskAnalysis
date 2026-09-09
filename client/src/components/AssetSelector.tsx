@@ -16,7 +16,12 @@ export function AssetSelector({ selectedAsset, onSelectAsset }: AssetSelectorPro
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const optionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const selected = ASSETS.find(asset => asset.id === selectedAsset) ?? ASSETS[0];
+  const selected = ASSETS.find(asset => asset.id === selectedAsset) ?? {
+    id: selectedAsset,
+    name: selectedAsset.charAt(0).toUpperCase() + selectedAsset.slice(1),
+    ticker: selectedAsset.toUpperCase(),
+    icon: '',
+  };
   const query = search.trim().toLowerCase();
   const filtered = ASSETS.filter(asset =>
     [asset.name, asset.ticker, asset.id].some(value => value.toLowerCase().includes(query))

@@ -25,6 +25,7 @@ export function PriceChart({ data, timeRange }: PriceChartProps) {
     () => createChartModel(data, dimensions.width, dimensions.height),
     [data, dimensions]
   );
+
   // Receipt of the same historical series must not restart interaction or animation.
   const signature = JSON.stringify(model?.points.map(({ timestamp, price }) => [timestamp, price]));
   const [inspection, setInspection] = useState<{
@@ -158,9 +159,13 @@ export function PriceChart({ data, timeRange }: PriceChartProps) {
                   {formatUtcAxisDate(point.timestamp)}
                 </text>
               ))}
-              <path d={model.areaPath} fill={`url(#${id}-area)`} />
+              <path className="price-chart-area" d={model.areaPath} fill={`url(#${id}-area)`} />
               <path
                 className="price-chart-line"
+                pathLength={1}
+                style={{
+                  strokeDasharray: 1,
+                }}
                 d={model.linePath}
                 fill="none"
                 stroke="var(--accent)"

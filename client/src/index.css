@@ -243,11 +243,92 @@
   }
   .price-chart-line {
     filter: drop-shadow(0 2px 4px #7997ff24);
+    stroke-dashoffset: 0;
+    animation: drawPriceChartLine 800ms linear forwards;
+  }
+  .price-chart-area {
+    animation: fadePriceChartArea 800ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
   .chart-canvas {
     height: 290px;
   }
+  .price-flash-up {
+    display: inline-block;
+    border-radius: 8px;
+    padding: 2px 8px;
+    margin: -2px -8px;
+    animation: priceFlashUp 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+  .price-flash-down {
+    display: inline-block;
+    border-radius: 8px;
+    padding: 2px 8px;
+    margin: -2px -8px;
+    animation: priceFlashDown 1.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
 }
+
+@keyframes drawPriceChartLine {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes fadePriceChartArea {
+  0% {
+    opacity: 0;
+  }
+  30% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes priceFlashUp {
+  0% {
+    color: var(--positive);
+    background-color: color-mix(in srgb, var(--positive) 25%, transparent);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--positive) 45%, transparent);
+    transform: scale(1.03);
+  }
+  50% {
+    color: var(--positive);
+    background-color: color-mix(in srgb, var(--positive) 12%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--positive) 25%, transparent);
+  }
+  100% {
+    color: inherit;
+    background-color: transparent;
+    box-shadow: none;
+    transform: scale(1);
+  }
+}
+
+@keyframes priceFlashDown {
+  0% {
+    color: var(--negative);
+    background-color: color-mix(in srgb, var(--negative) 25%, transparent);
+    box-shadow: 0 0 20px color-mix(in srgb, var(--negative) 45%, transparent);
+    transform: scale(1.03);
+  }
+  50% {
+    color: var(--negative);
+    background-color: color-mix(in srgb, var(--negative) 12%, transparent);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--negative) 25%, transparent);
+  }
+  100% {
+    color: inherit;
+    background-color: transparent;
+    box-shadow: none;
+    transform: scale(1);
+  }
+}
+
 @media (min-width: 1024px) {
   .chart-canvas {
     height: 326px;

@@ -44,7 +44,7 @@ namespace CryptoRiskAnalysis.API.Services
             // 1. Map CoinGecko ID to Binance symbol
             var symbol = BinanceSymbolMapper.GetBinanceSymbol(assetId);
             if (symbol == null)
-                throw new Exception($"Asset '{assetId}' not available on Binance");
+                throw new MarketDataProviderException("Binance", $"asset '{assetId}' is not mapped.");
 
             // 2. Check cache first (1-minute cache for fresh data)
             string cacheKey = $"binance_{symbol}_{days}";
