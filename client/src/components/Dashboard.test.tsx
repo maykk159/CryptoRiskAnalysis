@@ -59,6 +59,7 @@ function renderDashboard() {
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/');
   vi.stubGlobal(
     'matchMedia',
     vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }))
@@ -69,6 +70,7 @@ afterEach(() => {
   cleanup();
   clients.splice(0).forEach(client => client.clear());
   getAnalysis.mockReset();
+  window.history.replaceState(null, '', '/');
   vi.unstubAllGlobals();
 });
 
@@ -97,6 +99,7 @@ describe('Dashboard loading and recovery', () => {
     expect(container.contains(skeleton)).toBe(false);
     expect(container.querySelector('[aria-busy="true"]')).toBeNull();
     expect(screen.getByRole('status').textContent).toContain('is ready');
+    expect(screen.getAllByRole('heading', { name: 'Risk overview' })).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
   });
 
@@ -287,5 +290,57 @@ describe('Dashboard data integrity', () => {
     expect(getAnalysis).toHaveBeenCalledTimes(2);
     expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Refresh' }).disabled).toBe(true);
     await act(async () => refresh.resolve(analysis));
+  });
+});
+
+describe('Dashboard URL state and deep linking', () => {
+  it('loads the asset and time range directly specified in the URL query string', async () => {
+    window.history.replaceState(null, '', '/?asset=ethereum&days=90');
+    getAnalysis.mockResolvedValueOnce({
+      ...analysis,
+      assetId: 'ethereum',
+    });
+
+    renderDashboard();
+
+    expect(screen.getByRole('status').textContent).toContain(
+      'Loading 90-day risk analysis for Ethereum.'
+    );
+    expect(getAnalysis).toHaveBeenCalledWith('ethereum', 90, expect.any(AbortSignal));
+    expect(await screen.findByRole('heading', { name: '90-Day Price History' })).toBeTruthy();
+  });
+
+  it('updates the URL search params when the user changes asset or period', async () => {
+    const user = userEvent.setup();
+    getAnalysis.mockResolvedValue(analysis);
+    renderDashboard();
+
+    await screen.findByRole('heading', { name: 'Advanced Metrics' });
+    expect(window.location.search).toBe('?asset=bitcoin&days=30');
+
+    await user.click(screen.getByRole('button', { name: '7 Days' }));
+    expect(window.location.search).toBe('?asset=bitcoin&days=7');
+
+    await user.click(screen.getByRole('combobox', { name: 'Select Crypto Asset' }));
+    await user.click(screen.getByRole('option', { name: /Ethereum/ }));
+    expect(window.location.search).toBe('?asset=ethereum&days=7');
+  });
+
+  it('preserves an unknown asset from the URL and displays the error without falling back to bitcoin', async () => {
+    window.history.replaceState(null, '', '/?asset=unsupportedcoin&days=30');
+    const { ApiRequestError } = await import('../services/api');
+    getAnalysis.mockRejectedValueOnce(
+      new ApiRequestError(
+        'Crypto asset "unsupportedcoin" not found. Please select a different asset.',
+        404
+      )
+    );
+
+    renderDashboard();
+
+    expect(getAnalysis).toHaveBeenCalledWith('unsupportedcoin', 30, expect.any(AbortSignal));
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain('Crypto asset "Unsupportedcoin" not found');
+    expect(screen.getByRole('heading', { name: 'Analysis unavailable' })).toBeTruthy();
   });
 });

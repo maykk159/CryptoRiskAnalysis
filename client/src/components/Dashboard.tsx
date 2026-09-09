@@ -1,8 +1,8 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
 import { getRiskAnalysis, getErrorMessage } from '../services/api';
 import { ASSETS } from '../constants/assets';
+import { useAnalysisUrlState } from '../hooks/useAnalysisUrlState';
 import { TimeRangeSelector } from './dashboard/TimeRangeSelector';
 import { AssetSelector } from './AssetSelector';
 import { RiskScoreCard } from './dashboard/RiskScoreCard';
@@ -13,9 +13,19 @@ import { AssetSummary } from './dashboard/AssetSummary';
 import { PriceChart } from './PriceChart';
 
 export function Dashboard() {
-  const [selectedAssetId, setSelectedAssetId] = useState('bitcoin');
-  const [selectedTimeRange, setSelectedTimeRange] = useState(30);
-  const selectedAsset = ASSETS.find(a => a.id === selectedAssetId) ?? ASSETS[0];
+  const {
+    assetId: selectedAssetId,
+    days: selectedTimeRange,
+    setAssetId: setSelectedAssetId,
+    setDays: setSelectedTimeRange,
+  } = useAnalysisUrlState();
+
+  const selectedAsset = ASSETS.find(a => a.id === selectedAssetId) ?? {
+    id: selectedAssetId,
+    name: selectedAssetId.charAt(0).toUpperCase() + selectedAssetId.slice(1),
+    ticker: selectedAssetId.toUpperCase(),
+    icon: '',
+  };
   const {
     data,
     isPending,
@@ -84,7 +94,13 @@ export function Dashboard() {
               Refresh
             </button>
           </section>
-          <AssetSummary asset={selectedAsset} price={data?.currentPrice} loading={isPending} />
+          <AssetSummary
+            asset={selectedAsset}
+            price={data?.currentPrice}
+            priceHistory={data?.priceHistory}
+            loading={isPending}
+            updatedAt={dataUpdatedAt}
+          />
           {(error || paused) && (
             <div
               className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-control bg-panel p-4"
@@ -125,7 +141,7 @@ export function Dashboard() {
             {data && (
               <>
                 <div className="analysis-grid">
-                  <RiskScoreCard data={data} />
+                  <RiskScoreCard key={`${selectedAssetId}-${selectedTimeRange}`} data={data} />
                   <PriceChart
                     key={`${selectedAssetId}-${selectedTimeRange}`}
                     data={data.priceHistory}

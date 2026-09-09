@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+
 namespace CryptoRiskAnalysis.API.Services
 {
     /// <summary>
@@ -6,7 +8,7 @@ namespace CryptoRiskAnalysis.API.Services
     /// </summary>
     public static class BinanceSymbolMapper
     {
-        public static readonly Dictionary<string, string?> SymbolMap = new()
+        public static readonly FrozenDictionary<string, string?> SymbolMap = new Dictionary<string, string?>()
         {
             // Top 20 cryptocurrencies (excluding stablecoins)
             { "bitcoin", "BTCUSDT" },
@@ -30,7 +32,7 @@ namespace CryptoRiskAnalysis.API.Services
             { "litecoin", "LTCUSDT" },
             { "uniswap", "UNIUSDT" },
             { "aptos", "APTUSDT" }
-        };
+        }.ToFrozenDictionary();
 
         /// <summary>
         /// Checks if an asset is available on Binance with good liquidity

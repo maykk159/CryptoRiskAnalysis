@@ -1,5 +1,6 @@
-import { useState, useId } from 'react';
+import { useId, useState } from 'react';
 import { Activity, BarChart3, ChevronDown, ShieldCheck, TrendingUp } from 'lucide-react';
+import { useAnimatedNumber } from '../../hooks/useAnimatedNumber';
 import { useWideLayout } from '../../hooks/useWideLayout';
 import type { RiskAnalysisResponse } from '../../types';
 import { riskLevel } from '../../utils/riskPresentation';
@@ -20,8 +21,14 @@ export function RiskScoreCard({
   const [expanded, setExpanded] = useState(false);
   const detailId = useId();
   const score = data.compositeRiskScore;
+  const animatedScore = useAnimatedNumber(score);
+  const animatedComponents = {
+    volatilityScore: useAnimatedNumber(data.volatilityScore),
+    trendScore: useAnimatedNumber(data.trendScore),
+    volumeScore: useAnimatedNumber(data.volumeScore),
+  };
   const level = riskLevel(score);
-  const angle = (score / 100) * Math.PI;
+  const angle = (animatedScore / 100) * Math.PI;
   return (
     <section className="panel risk-panel" aria-labelledby="risk-heading">
       <div className="flex items-center gap-3">
@@ -43,32 +50,34 @@ export function RiskScoreCard({
             stroke="var(--line)"
             strokeWidth="12"
           />
-          <path
-            d="M 20 120 A 100 100 0 0 1 220 120"
-            pathLength="100"
-            fill="none"
-            stroke="var(--positive)"
-            strokeWidth="12"
-            strokeDasharray="29 71"
-          />
-          <path
-            d="M 20 120 A 100 100 0 0 1 220 120"
-            pathLength="100"
-            fill="none"
-            stroke="var(--warning)"
-            strokeWidth="12"
-            strokeDasharray="38 62"
-            strokeDashoffset="-31"
-          />
-          <path
-            d="M 20 120 A 100 100 0 0 1 220 120"
-            pathLength="100"
-            fill="none"
-            stroke="var(--negative)"
-            strokeWidth="12"
-            strokeDasharray="29 71"
-            strokeDashoffset="-71"
-          />
+          <g>
+            <path
+              d="M 20 120 A 100 100 0 0 1 220 120"
+              pathLength="100"
+              fill="none"
+              stroke="var(--positive)"
+              strokeWidth="12"
+              strokeDasharray="29 71"
+            />
+            <path
+              d="M 20 120 A 100 100 0 0 1 220 120"
+              pathLength="100"
+              fill="none"
+              stroke="var(--warning)"
+              strokeWidth="12"
+              strokeDasharray="38 62"
+              strokeDashoffset="-31"
+            />
+            <path
+              d="M 20 120 A 100 100 0 0 1 220 120"
+              pathLength="100"
+              fill="none"
+              stroke="var(--negative)"
+              strokeWidth="12"
+              strokeDasharray="29 71"
+              strokeDashoffset="-71"
+            />
+          </g>
           <path
             d="M 36 120 A 84 84 0 0 1 204 120"
             fill="none"
@@ -91,7 +100,7 @@ export function RiskScoreCard({
           <p
             className={`text-[52px] font-semibold leading-none tracking-tight tabular-nums ${level.color}`}
           >
-            {level.valid ? score.toFixed(1) : '—'}
+            {level.valid ? animatedScore.toFixed(1) : '—'}
           </p>
           <p className="mt-1 text-xs text-secondary">/100</p>
         </div>
@@ -130,7 +139,7 @@ export function RiskScoreCard({
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1 text-xs">
                   <span className="text-secondary">{label}</span>
                   <span className={`font-semibold tabular-nums ${component.color}`}>
-                    {component.valid ? data[key].toFixed(1) : '—'}
+                    {component.valid ? animatedComponents[key].toFixed(1) : '—'}
                     <span className="font-normal text-muted"> /100</span>
                     <span className="sr-only"> · {component.label}</span>
                   </span>
@@ -138,7 +147,7 @@ export function RiskScoreCard({
                 <div className="h-1.5 rounded-full bg-line" aria-hidden="true">
                   <div
                     className={`h-full rounded-full ${component.fill}`}
-                    style={{ width: `${component.valid ? data[key] : 0}%` }}
+                    style={{ width: `${component.valid ? animatedComponents[key] : 0}%` }}
                   />
                 </div>
               </div>

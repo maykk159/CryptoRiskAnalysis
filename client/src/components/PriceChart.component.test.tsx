@@ -52,3 +52,24 @@ it('clears old inspection when the series changes and preserves it for the same 
   rerender(<PriceChart data={[{ timestamp: Date.UTC(2026, 8, 5), price: 120 }]} timeRange={30} />);
   expect(screen.queryByText('Fri, Sep 4, 2026: $110.00')).toBeNull();
 });
+
+it('updates the existing chart paths on refresh without restarting the entry animation', () => {
+  const data = [
+    { timestamp: Date.UTC(2026, 8, 3), price: 100 },
+    { timestamp: Date.UTC(2026, 8, 4), price: 110 },
+    { timestamp: Date.UTC(2026, 8, 5), price: 105 },
+  ];
+  const { container, rerender } = render(<PriceChart data={data} timeRange={30} />);
+  const line = container.querySelector('.price-chart-line');
+  const area = container.querySelector('.price-chart-area');
+  const oldPath = line?.getAttribute('d');
+  rerender(
+    <PriceChart
+      data={data.map((point, index) => ({ ...point, price: index === 1 ? 102 : point.price }))}
+      timeRange={30}
+    />
+  );
+  expect(container.querySelector('.price-chart-line')).toBe(line);
+  expect(container.querySelector('.price-chart-area')).toBe(area);
+  expect(line?.getAttribute('d')).not.toBe(oldPath);
+});
