@@ -1,4 +1,12 @@
-import { Activity, Info, Scale, Shield, TrendingDown, type LucideIcon } from 'lucide-react';
+import {
+  Activity,
+  ArrowDownToLine,
+  Info,
+  Scale,
+  Shield,
+  TrendingDown,
+  type LucideIcon,
+} from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { RiskAnalysisResponse } from '../../types';
 import { formatMetric } from '../../utils/riskPresentation';
@@ -28,7 +36,7 @@ const METRICS: {
   },
   {
     key: 'maxDrawdown',
-    icon: TrendingDown,
+    icon: ArrowDownToLine,
     tone: 'tone-red',
     label: 'Max Drawdown',
     caption: 'Largest historical decline',
@@ -106,11 +114,12 @@ export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, Met
         {METRICS.map(metric => {
           const Icon = metric.icon;
           const value = data[metric.key];
-          const tone = !Number.isFinite(value)
-            ? 'tone-muted'
-            : metric.key === 'sharpeRatio' && value < 0
-              ? 'tone-red'
-              : metric.tone;
+          const tone =
+            typeof value !== 'number' || !Number.isFinite(value)
+              ? 'tone-muted'
+              : metric.key === 'sharpeRatio' && value < 0
+                ? 'tone-red'
+                : metric.tone;
           return (
             <article key={metric.key} className={`metric-item ${tone}`}>
               <div className="mb-3 flex items-start justify-between gap-2">

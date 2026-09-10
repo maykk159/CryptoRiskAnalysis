@@ -28,15 +28,17 @@ namespace CryptoRiskAnalysis.API.DTOs
             ValueAtRisk95 = riskResult.ValueAtRisk95;
             AnnualizedVolatility = riskResult.AnnualizedVolatility;
             PriceHistory = riskResult.PriceHistory;
+            Methodology = riskResult.Methodology;
         }
 
         // ✨ NEW: Advanced financial metrics
         public decimal DownsideRisk { get; set; }
         public decimal MaxDrawdown { get; set; }
-        public decimal SharpeRatio { get; set; }
+        public decimal? SharpeRatio { get; set; }
         public decimal ValueAtRisk95 { get; set; }
         public decimal AnnualizedVolatility { get; set; }
 
         public List<PriceData> PriceHistory { get; set; } = new();
+        public RiskMethodologyDetails Methodology { get; set; } = new();
     }
 }

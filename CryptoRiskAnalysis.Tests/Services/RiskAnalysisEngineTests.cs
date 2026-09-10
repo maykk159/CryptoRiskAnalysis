@@ -84,9 +84,9 @@ namespace CryptoRiskAnalysis.Tests.Services
         {
             var priceHistory = new List<PriceData>
             {
-                new() { Timestamp = 1000, Price = 100m },
-                new() { Timestamp = 2000, Price = invalidPrice },
-                new() { Timestamp = 3000, Price = 110m }
+                new() { Timestamp = 0L * 86_400_000, Price = 100m },
+                new() { Timestamp = 1L * 86_400_000, Price = invalidPrice },
+                new() { Timestamp = 2L * 86_400_000, Price = 110m }
             };
 
             Assert.Throws<ArgumentException>(() =>
@@ -100,8 +100,8 @@ namespace CryptoRiskAnalysis.Tests.Services
         {
             var priceHistory = new List<PriceData>
             {
-                new() { Timestamp = 1000, Price = 100m },
-                new() { Timestamp = 2000, Price = 101m }
+                new() { Timestamp = 0L * 86_400_000, Price = 100m },
+                new() { Timestamp = 1L * 86_400_000, Price = 101m }
             };
 
             Assert.Throws<ArgumentOutOfRangeException>(() =>
@@ -116,14 +116,14 @@ namespace CryptoRiskAnalysis.Tests.Services
             var logReturns = new[] { -0.10, 0.05, -0.20, 0.10, 0.03, 0.02 };
             var priceHistory = new List<PriceData>();
             var price = 100d;
-            priceHistory.Add(new PriceData { Timestamp = 1000, Price = (decimal)price });
+            priceHistory.Add(new PriceData { Timestamp = 0L * 86_400_000, Price = (decimal)price });
 
             for (int i = 0; i < logReturns.Length; i++)
             {
                 price *= Math.Exp(logReturns[i]);
                 priceHistory.Add(new PriceData
                 {
-                    Timestamp = 2000 + i * 1000,
+                    Timestamp = (i + 1L) * 86_400_000,
                     Price = (decimal)price
                 });
             }
@@ -146,13 +146,13 @@ namespace CryptoRiskAnalysis.Tests.Services
             // Arrange - 7 days of data
             var priceHistory = new List<PriceData>
             {
-                new PriceData { Timestamp = 1000, Price = 100m },
-                new PriceData { Timestamp = 2000, Price = 95m },  // -5%
-                new PriceData { Timestamp = 3000, Price = 98m },
-                new PriceData { Timestamp = 4000, Price = 97m },
-                new PriceData { Timestamp = 5000, Price = 99m },
-                new PriceData { Timestamp = 6000, Price = 91m },  // Worst: -8.08%
-                new PriceData { Timestamp = 7000, Price = 93m }
+                new PriceData { Timestamp = 0L * 86_400_000, Price = 100m },
+                new PriceData { Timestamp = 1L * 86_400_000, Price = 95m },  // -5%
+                new PriceData { Timestamp = 2L * 86_400_000, Price = 98m },
+                new PriceData { Timestamp = 3L * 86_400_000, Price = 97m },
+                new PriceData { Timestamp = 4L * 86_400_000, Price = 99m },
+                new PriceData { Timestamp = 5L * 86_400_000, Price = 91m },  // Worst: -8.08%
+                new PriceData { Timestamp = 6L * 86_400_000, Price = 93m }
             };
 
             // Act
@@ -174,7 +174,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var twentyPointResult = _engine.CalculateRisk(
                 CreatePriceHistory(twentyReturns), 1000m, 1000m);
 
-            Assert.Equal(20m, nineteenPointResult.ValueAtRisk95);
+            Assert.Equal(18.13m, nineteenPointResult.ValueAtRisk95);
             Assert.Equal(nineteenPointResult.ValueAtRisk95, twentyPointResult.ValueAtRisk95);
         }
 
@@ -205,13 +205,13 @@ namespace CryptoRiskAnalysis.Tests.Services
             // Arrange - Peak then drop scenario
             var priceHistory = new List<PriceData>
             {
-                new PriceData { Timestamp = 1000, Price = 100m },
-                new PriceData { Timestamp = 2000, Price = 120m }, // Peak
-                new PriceData { Timestamp = 3000, Price = 110m },
-                new PriceData { Timestamp = 4000, Price = 90m },  // Drop to 90 from 120 = -25%
-                new PriceData { Timestamp = 5000, Price = 95m },
-                new PriceData { Timestamp = 6000, Price = 100m },
-                new PriceData { Timestamp = 7000, Price = 105m }
+                new PriceData { Timestamp = 0L * 86_400_000, Price = 100m },
+                new PriceData { Timestamp = 1L * 86_400_000, Price = 120m }, // Peak
+                new PriceData { Timestamp = 2L * 86_400_000, Price = 110m },
+                new PriceData { Timestamp = 3L * 86_400_000, Price = 90m },  // Drop to 90 from 120 = -25%
+                new PriceData { Timestamp = 4L * 86_400_000, Price = 95m },
+                new PriceData { Timestamp = 5L * 86_400_000, Price = 100m },
+                new PriceData { Timestamp = 6L * 86_400_000, Price = 105m }
             };
 
             // Act
@@ -271,7 +271,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var priceHistory = prices
                 .Select((price, index) => new PriceData
                 {
-                    Timestamp = 1000L + index * 1000L,
+                    Timestamp = index * 86_400_000L,
                     Price = price
                 })
                 .ToList();
@@ -279,7 +279,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var result = _engine.CalculateRisk(priceHistory, 400m, 1000m);
 
             // 106 versus 100 is a 6% seven-day rise, so low volume signals a weak rally.
-            Assert.Equal(66m, result.VolumeScore);
+            Assert.Equal(58.5m, result.VolumeScore);
         }
 
         [Fact]
@@ -289,7 +289,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var priceHistory = prices
                 .Select((price, index) => new PriceData
                 {
-                    Timestamp = 1000L + index * 1000L,
+                    Timestamp = index * 86_400_000L,
                     Price = price
                 })
                 .ToList();
@@ -297,7 +297,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var result = _engine.CalculateRisk(priceHistory, 400m, 1000m);
 
             // There are only six return intervals, so no weekly price context is applied.
-            Assert.Equal(42m, result.VolumeScore);
+            Assert.Equal(52.5m, result.VolumeScore);
         }
 
         [Fact]
@@ -357,7 +357,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             foreach (var logReturn in logReturns)
             {
                 price *= Math.Exp(logReturn);
-                timestamp += 1000;
+                timestamp += 86_400_000;
                 priceHistory.Add(new PriceData
                 {
                     Timestamp = timestamp,

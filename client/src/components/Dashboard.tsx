@@ -149,6 +149,15 @@ export function Dashboard() {
                   />
                 </div>
                 <AdvancedMetrics data={data} />
+                {!!data.methodology?.warnings.length && (
+                  <aside aria-label="Analysis limitations" className="mt-4 text-sm text-secondary">
+                    <ul className="list-disc space-y-1 pl-5">
+                      {data.methodology.warnings.map(warning => (
+                        <li key={warning}>{warning}</li>
+                      ))}
+                    </ul>
+                  </aside>
+                )}
               </>
             )}
             {!data && !isPending && (

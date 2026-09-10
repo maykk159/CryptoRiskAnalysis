@@ -16,6 +16,10 @@ const metrics = {
 };
 
 describe('AdvancedMetrics help', () => {
+  it('shows an undefined Sharpe ratio as unavailable', () => {
+    render(<AdvancedMetrics data={{ ...metrics, sharpeRatio: null }} />);
+    expect(screen.getByText('Unavailable')).toBeDefined();
+  });
   it('closes an open explanation when the user clicks outside it', async () => {
     const user = userEvent.setup();
     const { container } = render(<AdvancedMetrics data={metrics} />);
