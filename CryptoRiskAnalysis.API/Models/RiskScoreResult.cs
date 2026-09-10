@@ -14,12 +14,13 @@ namespace CryptoRiskAnalysis.API.Models
         /// <summary>Maximum peak-to-trough price decline as a percentage. E.g. 30.0 = 30 %.</summary>
         public decimal MaxDrawdown { get; set; }
         /// <summary>Annualized Sharpe ratio (dimensionless). Higher is better. Risk-free rate = 0.</summary>
-        public decimal SharpeRatio { get; set; }
-        /// <summary>Daily Value-at-Risk at 95 % confidence as a percentage. E.g. 5.0 = 5 % worst-case daily loss.</summary>
+        public decimal? SharpeRatio { get; set; }
+        /// <summary>Historical 5th-percentile daily percentage loss; not a maximum future loss.</summary>
         public decimal ValueAtRisk95 { get; set; }
         /// <summary>Annualized volatility (log-return std dev × √365) as a percentage. E.g. 80.0 = 80 %.</summary>
         public decimal AnnualizedVolatility { get; set; }
 
         public List<PriceData> PriceHistory { get; set; } = new();
+        public RiskMethodologyDetails Methodology { get; set; } = new();
     }
 }

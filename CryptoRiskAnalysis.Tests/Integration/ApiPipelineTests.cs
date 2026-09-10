@@ -20,6 +20,57 @@ namespace CryptoRiskAnalysis.Tests.Integration;
 
 public class ApiPipelineTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RiskController_InvalidEngineInputBecomesBadGateway(bool missingVolume)
+    {
+        await using var provider = CreateMiddlewareServices(Environments.Production);
+        var history = Enumerable.Range(0, 7).Select(i => new CryptoRiskAnalysis.API.Models.PriceData
+        {
+            Timestamp = i * 86_400_000L,
+            Price = 100m
+        }).ToList();
+        if (!missingVolume) history[^1].Timestamp += 86_400_000L;
+        var service = new Mock<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>();
+        service.Setup(s => s.GetAllMarketDataAsync("bitcoin", 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((history, 100m, 1000m, missingVolume ? 0m : 1000m));
+        var controller = new CryptoRiskAnalysis.API.Controllers.RiskAnalysisController(
+            service.Object, new RiskAnalysisEngine(NullLogger<RiskAnalysisEngine>.Instance),
+            NullLogger<CryptoRiskAnalysis.API.Controllers.RiskAnalysisController>.Instance);
+        var application = new ApplicationBuilder(provider);
+        application.UseMiddleware<ExceptionHandlingMiddleware>();
+        application.Run(async context => { await controller.GetRiskAnalysis("bitcoin", 7, context.RequestAborted); });
+        var context = CreateHttpContext(provider);
+        await application.Build()(context);
+        Assert.Equal(StatusCodes.Status502BadGateway, context.Response.StatusCode);
+        Assert.False((await ReadResponseAsync(context)).Succeeded);
+    }
+
+    [Fact]
+    public async Task RiskController_SerializesMethodologyAndUndefinedSharpeFromRealEngine()
+    {
+        var history = Enumerable.Range(0, 7).Select(i => new CryptoRiskAnalysis.API.Models.PriceData
+        {
+            Timestamp = i * 86_400_000L,
+            Price = 100m
+        }).ToList();
+        var service = new Mock<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>();
+        service.Setup(s => s.GetAllMarketDataAsync("bitcoin", 7, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((history, 100m, 1000m, 1000m));
+        var controller = new CryptoRiskAnalysis.API.Controllers.RiskAnalysisController(
+            service.Object, new RiskAnalysisEngine(NullLogger<RiskAnalysisEngine>.Instance),
+            NullLogger<CryptoRiskAnalysis.API.Controllers.RiskAnalysisController>.Instance);
+        var response = await controller.GetRiskAnalysis("bitcoin", 7, TestContext.Current.CancellationToken);
+        var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(response.Result);
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var data = json.RootElement.GetProperty("data");
+        Assert.Equal(JsonValueKind.Null, data.GetProperty("sharpeRatio").ValueKind);
+        Assert.Equal(9m, data.GetProperty("compositeRiskScore").GetDecimal());
+        Assert.Equal("2.0.0", data.GetProperty("methodology").GetProperty("version").GetString());
+        Assert.Equal(6, data.GetProperty("methodology").GetProperty("returnCount").GetInt32());
+    }
+
     [Fact]
     public async Task ExceptionMiddleware_UsesJsonEnvelopeForUnhandledErrors()
     {

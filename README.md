@@ -233,7 +233,7 @@ r(t) = ln(P(t) / P(t-1))
 | Trend score | Absolute difference between the recent price average and the full selected-period average |
 | Volume score | Current-to-average volume ratio interpreted alongside the recent price change |
 
-The composite risk score is a bounded 0–100 application score. It starts with volatility, trend, and volume weights of 40%, 30%, and 30%, then adjusts the weights when one component is elevated. Concurrent high-risk signals amplify the result; uniformly low signals reduce it. This score is a project-specific heuristic and should be validated for any production or financial use case.
+Methodology **2.0.0** uses fixed volatility, trend, and volume weights of **40%, 30%, and 30%**. The API returns weighted contributions, input dates/counts, risk level, and data warnings. Invalid daily series and unavailable volume baselines are rejected. Sharpe is nullable when return variability is effectively zero. Historical VaR is converted from log return to actual percentage loss. See [the full methodology and compatibility notes](docs/risk-methodology.md) for formulas, thresholds, assumptions, and limitations.
 
 ## Supported dashboard assets
 
@@ -248,7 +248,7 @@ The API also accepts other valid CoinGecko asset IDs. Assets without a Binance m
 Run the backend test suite:
 
 ```bash
-dotnet test
+dotnet test --project CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj
 ```
 
 Validate the frontend:

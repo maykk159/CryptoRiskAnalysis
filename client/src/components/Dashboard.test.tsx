@@ -75,6 +75,31 @@ afterEach(() => {
 });
 
 describe('Dashboard loading and recovery', () => {
+  it('displays limitations returned by the risk engine', async () => {
+    getAnalysis.mockResolvedValueOnce({
+      ...analysis,
+      methodology: {
+        version: '2.0.0',
+        riskLevel: 'Medium',
+        observationCount: 7,
+        returnCount: 6,
+        periodStart: 0,
+        periodEnd: 518400000,
+        volatilityWeight: 0.4,
+        trendWeight: 0.3,
+        volumeWeight: 0.3,
+        volatilityContribution: 20,
+        trendContribution: 12,
+        volumeContribution: 10,
+        warnings: ['Short history: fewer than 30 daily prices; annualized estimates are unstable.'],
+      },
+    });
+    renderDashboard();
+    expect(
+      (await screen.findByRole('complementary', { name: 'Analysis limitations' })).textContent
+    ).toContain('Short history');
+  });
+
   it('reserves the dashboard layout while loading and replaces them with the result', async () => {
     const request = deferredAnalysis();
     getAnalysis.mockReturnValueOnce(request.promise);

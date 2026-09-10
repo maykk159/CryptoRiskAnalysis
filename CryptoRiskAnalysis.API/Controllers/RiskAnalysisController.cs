@@ -78,7 +78,15 @@ namespace CryptoRiskAnalysis.API.Controllers
             }
 
             // 2. Calculate Risk (100% local - no API calls!)
-            var riskResult = _riskEngine.CalculateRisk(priceHistory, currentVolume, avgVolume);
+            Models.RiskScoreResult riskResult;
+            try
+            {
+                riskResult = _riskEngine.CalculateRisk(priceHistory, currentVolume, avgVolume);
+            }
+            catch (ArgumentException ex)
+            {
+                throw new MarketDataProviderException("Market data service", "data is unsuitable for daily risk analysis.", ex);
+            }
 
             // 3. Map to DTO
             var responseDto = new RiskAnalysisResponseDto(assetId, currentPrice, riskResult);

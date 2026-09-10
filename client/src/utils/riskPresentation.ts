@@ -9,7 +9,7 @@ export function riskLevel(score: number | undefined) {
 }
 
 export function formatMetric(
-  value: number | undefined,
+  value: number | null | undefined,
   kind: 'percent' | 'loss' | 'ratio' = 'percent'
 ) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return 'Unavailable';
