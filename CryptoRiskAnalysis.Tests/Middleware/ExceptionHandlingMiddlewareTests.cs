@@ -11,6 +11,33 @@ namespace CryptoRiskAnalysis.Tests.Middleware;
 
 public class ExceptionHandlingMiddlewareTests
 {
+    [Fact]
+    public async Task StartedResponse_RethrowsOriginalExceptionWithoutRewritingResponse()
+    {
+        var response = new Mock<Microsoft.AspNetCore.Http.Features.IHttpResponseFeature>(MockBehavior.Strict);
+        response.SetupGet(r => r.HasStarted).Returns(true);
+        var context = new DefaultHttpContext();
+        context.Features.Set(response.Object);
+        var original = new InvalidOperationException("stream failed");
+        var middleware = Create(_ => throw original, new Mock<ILogger<ExceptionHandlingMiddleware>>());
+        Assert.Same(original, await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(context)));
+        response.VerifyGet(r => r.HasStarted, Times.Once);
+        response.VerifyNoOtherCalls();
+    }
+
+    [Fact]
+    public async Task ProviderQuota_ReturnsRetryAfterHeader()
+    {
+        var context = new DefaultHttpContext();
+        using var body = new MemoryStream();
+        context.Response.Body = body;
+        var middleware = Create(_ => throw new CryptoRiskAnalysis.API.Exceptions.UpstreamRateLimitException(
+            "CoinGecko", TimeSpan.FromMilliseconds(1500)), new Mock<ILogger<ExceptionHandlingMiddleware>>());
+        await middleware.InvokeAsync(context);
+        Assert.Equal(429, context.Response.StatusCode);
+        Assert.Equal("2", context.Response.Headers.RetryAfter.ToString());
+    }
+
     [Theory]
     [InlineData("circuit", 503, "Market data provider is temporarily unavailable.")]
     [InlineData("polly-timeout", 504, "Market data request timed out.")]

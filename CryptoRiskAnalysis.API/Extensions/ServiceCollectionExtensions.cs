@@ -6,11 +6,25 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.Http.Resilience;
 using System.Net;
 using System.Threading.RateLimiting;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Polly;
 
 namespace CryptoRiskAnalysis.API.Extensions
 {
     public static class ServiceCollectionExtensions
     {
+        public static IServiceCollection AddHttpsRedirectionConfiguration(
+            this IServiceCollection services, IConfiguration configuration)
+        {
+            return services.AddHttpsRedirection(options =>
+            {
+                options.HttpsPort = configuration.GetValue<int?>("HttpsRedirection:HttpsPort") ?? 443;
+                if (options.HttpsPort is < 1 or > 65535)
+                    throw new InvalidOperationException("HttpsRedirection:HttpsPort must be between 1 and 65535.");
+                options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect;
+            });
+        }
+
         public static IServiceCollection AddForwardedHeadersConfiguration(
             this IServiceCollection services,
             IConfiguration configuration)
@@ -74,17 +88,30 @@ namespace CryptoRiskAnalysis.API.Extensions
             // Add Memory Cache
             services.AddMemoryCache();
             services.AddSingleton<MarketDataRequestLock>();
+            services.TryAddSingleton(TimeProvider.System);
+            services.AddOptions<CoinGeckoOptions>()
+                .Validate(o => o.RequestsPerMinute > 0 && o.RequestsPerMinute <= 10000,
+                    "CoinGecko:RequestsPerMinute must be between 1 and 10000.")
+                .ValidateOnStart();
+            services.AddSingleton<CoinGeckoRequestBudget>();
+            services.AddTransient<CoinGeckoRateLimitHandler>();
 
             // Retry transient failures and 429 responses up to three times with
             // exponential backoff, with per-attempt and total request timeouts.
             services.AddHttpClient<BinanceSpotService>()
                 .AddStandardResilienceHandler(ConfigureResilience);
 
-            services.AddHttpClient<CoinGeckoService>()
-                .AddStandardResilienceHandler(ConfigureResilience);
+            var coinGeckoClient = services.AddHttpClient<CoinGeckoService>(client =>
+            {
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("CryptoRiskAnalysis/1.0");
+                client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+            });
+            coinGeckoClient.AddStandardResilienceHandler(ConfigureResilience);
+            coinGeckoClient.AddHttpMessageHandler<CoinGeckoRateLimitHandler>();
 
             // Register HybridCryptoDataService as the single implementation of ICryptoDataService
             services.AddScoped<ICryptoDataService, HybridCryptoDataService>();
+            services.AddScoped<ICurrentQuoteService, CurrentQuoteService>();
 
             // Register Risk Engine
             services.AddScoped<IRiskEngine, RiskAnalysisEngine>();
@@ -127,12 +154,13 @@ namespace CryptoRiskAnalysis.API.Extensions
                 : address.ToString();
         }
 
-        public static IServiceCollection AddCorsConfiguration(this IServiceCollection services)
+        public static IServiceCollection AddCorsConfiguration(this IServiceCollection services, IConfiguration configuration)
         {
+            var origins = configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
             services.AddCors(options =>
             {
                 options.AddPolicy("AllowReactApp",
-                    builder => builder.WithOrigins("http://localhost:5173", "http://localhost:5174")
+                    builder => builder.WithOrigins(origins)
                                       .AllowAnyMethod()
                                       .AllowAnyHeader());
             });
@@ -148,6 +176,9 @@ namespace CryptoRiskAnalysis.API.Extensions
         {
             options.Retry.MaxRetryAttempts = 3;
             options.Retry.Delay = TimeSpan.FromSeconds(2);
+            options.Retry.BackoffType = DelayBackoffType.Exponential;
+            options.Retry.UseJitter = true;
+            options.Retry.ShouldRetryAfterHeader = true;
             options.TotalRequestTimeout.Timeout = TimeSpan.FromSeconds(30);
             options.AttemptTimeout.Timeout = TimeSpan.FromSeconds(10);
             options.CircuitBreaker.FailureRatio = 0.5;

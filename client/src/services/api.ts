@@ -15,9 +15,11 @@ export class ApiRequestError extends Error {
 export const getRiskAnalysis = async (
   assetId: string,
   days: number = 30,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  refresh = false
 ): Promise<RiskAnalysisResponse> => {
   const query = new URLSearchParams({ days: String(days) });
+  if (refresh) query.set('refresh', 'true');
   const response = await fetch(`${API_URL}/RiskAnalysis/${encodeURIComponent(assetId)}?${query}`, {
     headers: { Accept: 'application/json' },
     signal,

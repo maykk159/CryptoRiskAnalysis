@@ -147,7 +147,7 @@ namespace CryptoRiskAnalysis.Tests.Services
                 avgVolume: 900m
             );
 
-            object? cacheValue = cachedData;
+            object? cacheValue = new API.Models.CachedMarketData(cachedData, []);
             _mockCache.Setup(c => c.TryGetValue(It.IsAny<object>(), out cacheValue))
                 .Returns(true);
 

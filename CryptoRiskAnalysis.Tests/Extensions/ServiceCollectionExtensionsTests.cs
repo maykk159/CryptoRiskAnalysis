@@ -8,6 +8,7 @@ using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Polly.CircuitBreaker;
@@ -17,6 +18,39 @@ namespace CryptoRiskAnalysis.Tests.Extensions;
 
 public class ServiceCollectionExtensionsTests
 {
+    [Theory]
+    [InlineData(null, 443)]
+    [InlineData("8443", 8443)]
+    public void HttpsRedirection_UsesConfiguredPort(string? configuredPort, int expectedPort)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["HttpsRedirection:HttpsPort"] = configuredPort }).Build();
+        var services = new ServiceCollection();
+        services.AddHttpsRedirectionConfiguration(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionOptions>>().Value;
+        Assert.Equal(expectedPort, options.HttpsPort);
+        Assert.Equal(308, options.RedirectStatusCode);
+    }
+
+    [Fact]
+    public void Cors_UsesConfiguredProductionOrigins()
+    {
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Cors:AllowedOrigins:0"] = "https://risk.example.com"
+            }).Build();
+        var services = new ServiceCollection();
+        services.AddCorsConfiguration(configuration);
+        using var provider = services.BuildServiceProvider();
+        var policy = provider.GetRequiredService<IOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>>()
+            .Value.GetPolicy("AllowReactApp")!;
+        Assert.True(policy.IsOriginAllowed("https://risk.example.com"));
+        Assert.False(policy.IsOriginAllowed("http://localhost:5173"));
+        Assert.False(policy.IsOriginAllowed("https://untrusted.example.com"));
+    }
+
     [Fact]
     public async Task RateLimitRejection_UsesApiResponseEnvelope()
     {

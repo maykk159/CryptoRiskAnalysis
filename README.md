@@ -20,7 +20,9 @@ The project is built as a .NET 10 Web API with a React 19 and TypeScript client.
 - **Risk dashboard:** Composite risk, volatility, trend, and volume scores on a 0–100 scale.
 - **Advanced metrics:** Annualized volatility, downside risk, maximum drawdown, annualized Sharpe ratio, and daily historical VaR at 95% confidence.
 - **Resilient provider access:** Exponential retries, timeouts, circuit breakers, cancellation propagation, and typed upstream errors.
-- **Efficient requests:** In-memory provider caches and a single combined market-data request per analysis.
+- **Efficient requests:** Cached daily history plus short-lived, on-demand quotes from the provider's price endpoint.
+- **Persistent history:** SQLite daily prices and quote volumes, source-separated upserts, and a database-first historical API with gap backfill.
+- **CoinGecko quota protection:** Shared outgoing request budget, retry accounting, and `Retry-After` cooldowns.
 - **API protection:** Per-IP fixed-window rate limiting with 30 requests per minute.
 - **Structured diagnostics:** Console and rolling file logs through Serilog.
 
@@ -52,10 +54,11 @@ The API follows a layered structure:
 |---|---|---|
 | Role | Primary for mapped assets | Fallback and long-tail assets |
 | Market data | Daily USDT klines | Daily USD market chart |
-| Cache duration | 60 seconds | 60 seconds |
+| Daily history cache | 60 seconds | 60 seconds |
+| Current quote cache | 10 seconds; Refresh bypasses it | 30 seconds; Refresh bypasses it subject to quota |
 | Authentication | Not required | Not required |
 
-Transient network errors, upstream `5xx` responses, and `429` responses are retried up to three times with exponential delays. A provider circuit opens for 30 seconds after five handled failures, and each provider request has a 10-second policy timeout.
+Transient failures are retried up to three times with exponential backoff and jitter, subject to the outgoing quota and shared cooldown. Attempts have a 10-second timeout and each provider operation has a 30-second total timeout. Circuit breaking uses a 50% failure ratio with at least five outcomes in 30 seconds. CoinGecko honors `Retry-After` and limits outgoing attempts to a configurable 20 per rolling minute per application instance. See [market data configuration, persistence, and API behavior](docs/market-data.md).
 
 ## Technology stack
 
@@ -160,7 +163,9 @@ GET /api/RiskAnalysis/{assetId}?days={7|30|90}
 ```
 
 `days` defaults to `30`. The `assetId` uses the CoinGecko identifier format, such as `bitcoin`, `ethereum`, or `polygon-ecosystem-token`.
-The displayed `currentPrice` comes from the latest provider observation and refreshes every 60 seconds while the dashboard is open. Risk metrics and `priceHistory` continue to use completed UTC daily candles only.
+The displayed `currentPrice` comes from Binance's symbol price ticker or CoinGecko's simple-price endpoint, using the same provider as the historical series. `currentQuote` includes the provider, quote currency, server fetch time and, when supplied, source update time. Binance quotes are USDT; CoinGecko quotes are USD. Risk metrics and `priceHistory` continue to use completed UTC daily candles only.
+
+The dashboard requests an update every 10 seconds while active. Quotes are cached by provider/asset/currency for 10 seconds (Binance) or 30 seconds (CoinGecko), independent of the selected 7/30/90-day period. **Refresh** sends `?refresh=true` to bypass this quote cache; provider quotas still apply. A failed refresh leaves the last successful result visible with an error. There is no background collector when nobody is using the site. The frontend revalidates when revisiting a period rather than treating its old price as fresh for another minute.
 
 
 Example request:

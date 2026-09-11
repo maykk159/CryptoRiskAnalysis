@@ -30,13 +30,13 @@ export function RiskScoreCard({
   const level = riskLevel(score);
   const angle = (animatedScore / 100) * Math.PI;
   return (
-    <section className="panel risk-panel" aria-labelledby="risk-heading">
+    <section className="panel risk-panel" aria-labelledby={`${detailId}-heading`}>
       <div className="flex items-center gap-3">
         <span className="feature-icon tone-violet">
           <ShieldCheck size={21} aria-hidden="true" />
         </span>
         <div>
-          <h2 id="risk-heading" className="section-title">
+          <h2 id={`${detailId}-heading`} className="section-title">
             Risk overview
           </h2>
           <p className="mt-0.5 text-xs text-muted">Composite risk score</p>

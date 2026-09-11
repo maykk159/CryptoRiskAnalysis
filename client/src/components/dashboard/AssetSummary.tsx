@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import { TrendingDown, TrendingUp } from 'lucide-react';
-import type { Asset, PriceData } from '../../types';
+import type { Asset, PriceData, RiskAnalysisResponse } from '../../types';
 import { formatUsdPrice } from '../../utils/formatUsdPrice';
+import { formatUtcTime } from '../../utils/formatUtcDate';
 import { CryptoAssetIcon } from '../CryptoAssetIcon';
 
 export function AssetSummary({
@@ -10,12 +11,14 @@ export function AssetSummary({
   priceHistory,
   loading,
   updatedAt,
+  quote,
 }: {
   asset: Asset;
   price?: number;
   priceHistory?: PriceData[];
   loading: boolean;
   updatedAt?: number;
+  quote?: RiskAnalysisResponse['currentQuote'];
 }) {
   const [flash, setFlash] = useState<'up' | 'down' | null>(null);
   const prevPriceRef = useRef<number | undefined>(price);
@@ -31,6 +34,7 @@ export function AssetSummary({
       ? (priceChange / startPrice) * 100
       : undefined;
   const isPositive = priceChangePercent !== undefined ? priceChangePercent >= 0 : null;
+  const periodDirection = useEffectEvent(() => (isPositive === false ? 'down' : 'up'));
 
   useEffect(() => {
     // If the asset changed, reset refs without flashing
@@ -67,16 +71,7 @@ export function AssetSummary({
       updatedAt !== prevUpdatedAtRef.current &&
       price !== undefined
     ) {
-      const direction =
-        prevPriceRef.current !== undefined && price !== prevPriceRef.current
-          ? price > prevPriceRef.current
-            ? 'up'
-            : 'down'
-          : isPositive !== null
-            ? isPositive
-              ? 'up'
-              : 'down'
-            : 'up';
+      const direction = periodDirection();
 
       setFlash(direction);
       prevPriceRef.current = price;
@@ -95,7 +90,7 @@ export function AssetSummary({
     if (updatedAt !== undefined && prevUpdatedAtRef.current === undefined) {
       prevUpdatedAtRef.current = updatedAt;
     }
-  }, [asset.id, price, updatedAt, isPositive]);
+  }, [asset.id, price, updatedAt]);
 
   const flashClass = flash === 'up' ? 'price-flash-up' : flash === 'down' ? 'price-flash-down' : '';
 
@@ -110,7 +105,7 @@ export function AssetSummary({
         </span>
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-            {asset.ticker} / USD
+            {asset.ticker} / {quote?.currency ?? 'USD'}
           </p>
           <h2 className="break-words text-2xl font-semibold tracking-tight sm:text-[28px]">
             {asset.name}
@@ -124,9 +119,18 @@ export function AssetSummary({
             aria-hidden="true"
           />
           <p className="text-xs text-secondary">
-            Current price <span className="text-muted">· USD</span>
+            Current price <span className="text-muted">· {quote?.currency ?? 'USD'}</span>
           </p>
         </div>
+        {quote && (
+          <p className="mb-1 text-xs text-muted">
+            {quote.source} · Fetched at{' '}
+            <time dateTime={quote.fetchedAt}>{formatUtcTime(quote.fetchedAt)}</time>
+            {quote.sourceUpdatedAt && (
+              <> · Source updated at {formatUtcTime(quote.sourceUpdatedAt)}</>
+            )}
+          </p>
+        )}
         {loading ? (
           <div
             aria-label="Loading current price"

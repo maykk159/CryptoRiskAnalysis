@@ -13,6 +13,10 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly IMemoryCache _cache;
         private readonly ILogger<BinanceSpotService> _logger;
         private readonly MarketDataRequestLock _requestLock;
+        private readonly IHistoricalMarketDataStore? _historyStore;
+        internal Task<MarketQuote> GetCurrentQuoteAsync(string assetId, TimeProvider clock, CancellationToken cancellationToken) =>
+            MarketQuoteReader.ReadAsync(_httpClient, assetId, MarketDataSource.Binance, clock, cancellationToken);
+
         private const string BaseUrl = "https://api.binance.com/api/v3";
         private const int CacheDurationSeconds = 60; // 1 minute cache for fresh data
 
@@ -20,12 +24,14 @@ namespace CryptoRiskAnalysis.API.Services
             HttpClient httpClient,
             IMemoryCache cache,
             ILogger<BinanceSpotService> logger,
-            MarketDataRequestLock? requestLock = null)
+            MarketDataRequestLock? requestLock = null,
+            IHistoricalMarketDataStore? historyStore = null)
         {
             _httpClient = httpClient;
             _cache = cache;
             _logger = logger;
             _requestLock = requestLock ?? new MarketDataRequestLock();
+            _historyStore = historyStore;
         }
 
         /// <summary>
@@ -33,7 +39,7 @@ namespace CryptoRiskAnalysis.API.Services
         /// HTTP retries (on 5xx and 429) are handled automatically by the Polly policy
         /// configured in ServiceCollectionExtensions — no manual retry loop needed here.
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        public async Task<MarketDataSnapshot> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default)
@@ -48,17 +54,19 @@ namespace CryptoRiskAnalysis.API.Services
 
             // 2. Check cache first (1-minute cache for fresh data)
             string cacheKey = $"binance_{symbol}_{days}";
-            if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal, decimal) cachedData))
+            if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("Binance Cache HIT for {AssetId} ({Symbol})", assetId, symbol);
-                return cachedData;
+                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
+                return cachedData.Data;
             }
 
             using var requestLease = await _requestLock.AcquireAsync(cacheKey, cancellationToken);
-            if (_cache.TryGetValue(cacheKey, out cachedData))
+            if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("Binance Cache HIT after waiting for {AssetId} ({Symbol})", assetId, symbol);
-                return cachedData;
+                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
+                return cachedData.Data;
             }
 
             _logger.LogInformation("Binance Cache MISS for {AssetId} ({Symbol}) — fetching from API", assetId, symbol);
@@ -181,10 +189,16 @@ namespace CryptoRiskAnalysis.API.Services
                     avgVolume = 0;
                 }
 
-                var result = (priceHistory, currentPrice, currentVolume, avgVolume);
+                var result = new MarketDataSnapshot(priceHistory, currentPrice, currentVolume, avgVolume, MarketDataSource.Binance);
+
+                var cacheEntry = new CachedMarketData(result,
+                        priceHistory.Select((p, i) => new DailyMarketObservation(
+                            DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(p.Timestamp).UtcDateTime),
+                            p.Timestamp, p.Price, volumes[i])).ToList());
+                await cacheEntry.PersistAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
 
                 // 7. Cache for 1 minute
-                _cache.Set(cacheKey, result, new MemoryCacheEntryOptions()
+                _cache.Set(cacheKey, cacheEntry, new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
 
                 _logger.LogInformation("Binance: Fetched {Count} candles for {AssetId} ({Symbol}) — cached for {Duration}s",
@@ -213,7 +227,7 @@ namespace CryptoRiskAnalysis.API.Services
         private static decimal ReadDecimal(JsonElement value)
         {
             return value.ValueKind == JsonValueKind.String
-                ? decimal.Parse(value.GetString()!, System.Globalization.CultureInfo.InvariantCulture)
+                ? decimal.Parse(value.GetString()!, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture)
                 : value.GetDecimal();
         }
 

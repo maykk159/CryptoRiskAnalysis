@@ -15,25 +15,26 @@ namespace CryptoRiskAnalysis.API.Controllers
         private readonly ICryptoDataService _cryptoDataService;
         private readonly IRiskEngine _riskEngine;
         private readonly ILogger<RiskAnalysisController> _logger;
+        private readonly ICurrentQuoteService _quotes;
 
         public RiskAnalysisController(
             ICryptoDataService cryptoDataService,
             IRiskEngine riskEngine,
-            ILogger<RiskAnalysisController> logger)
+            ILogger<RiskAnalysisController> logger, ICurrentQuoteService quotes)
         {
             _cryptoDataService = cryptoDataService;
             _riskEngine = riskEngine;
             _logger = logger;
+            _quotes = quotes;
         }
 
         [HttpGet("{assetId}")]
         public async Task<ActionResult<ApiResponse<RiskAnalysisResponseDto>>> GetRiskAnalysis(
             string assetId,
             [FromQuery] int days = 30,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            [FromQuery] bool refresh = false)
         {
-            _logger.LogInformation("Received risk analysis request for {AssetId} over {Days} days", assetId, days);
-
             if (string.IsNullOrWhiteSpace(assetId))
             {
                 _logger.LogWarning("Risk analysis request received with empty or null assetId.");
@@ -46,6 +47,11 @@ namespace CryptoRiskAnalysis.API.Controllers
                 return BadRequest(new ApiResponse<RiskAnalysisResponseDto>("Asset ID çok uzun."));
             }
 
+            if (assetId.Any(char.IsControl) || assetId.Contains('\u2028') || assetId.Contains('\u2029'))
+                return BadRequest(new ApiResponse<RiskAnalysisResponseDto>("Asset ID contains invalid control characters."));
+
+            _logger.LogInformation("Received risk analysis request for {AssetId} over {Days} days", assetId, days);
+
             // Validate days parameter - only allow 7, 30, or 90
             if (days != 7 && days != 30 && days != 90)
             {
@@ -53,11 +59,12 @@ namespace CryptoRiskAnalysis.API.Controllers
                 return BadRequest(new ApiResponse<RiskAnalysisResponseDto>("Geçersiz gün parametresi. Yalnızca 7, 30 veya 90 gün kabul edilir."));
             }
 
-            // 1. Fetch ALL data in one call (optimized!)
-            var (priceHistory, currentPrice, currentVolume, avgVolume) = await _cryptoDataService.GetAllMarketDataAsync(
+            // Historical data retains its own cache; the quote is fetched separately below.
+            var snapshot = await _cryptoDataService.GetAllMarketDataAsync(
                 assetId,
                 days,
                 cancellationToken);
+            var (priceHistory, _, currentVolume, avgVolume) = snapshot;
 
             if (priceHistory == null || !priceHistory.Any())
             {
@@ -89,7 +96,15 @@ namespace CryptoRiskAnalysis.API.Controllers
             }
 
             // 3. Map to DTO
-            var responseDto = new RiskAnalysisResponseDto(assetId, currentPrice, riskResult);
+            var quote = await _quotes.GetAsync(assetId, snapshot.Source, refresh, cancellationToken);
+            var responseDto = new RiskAnalysisResponseDto(assetId, quote.Price, riskResult)
+            {
+                CurrentQuote = quote
+            };
+
+            // Browsers/proxies must revalidate; application caches enforce provider quotas.
+            if (ControllerContext.HttpContext is not null)
+                Response.Headers.CacheControl = "no-store";
 
             _logger.LogInformation("Successfully calculated risk for {AssetId}: Score {Score}. returning {Count} history points.",
                 assetId, riskResult.CompositeRiskScore, responseDto.PriceHistory.Count);

@@ -34,6 +34,8 @@ namespace CryptoRiskAnalysis.API.Middleware
             catch (Exception ex)
             {
                 _logger.LogError(ex, "An unhandled exception occurred.");
+                if (context.Response.HasStarted)
+                    throw;
                 await HandleExceptionAsync(context, ex);
             }
         }
@@ -41,9 +43,13 @@ namespace CryptoRiskAnalysis.API.Middleware
         private async Task HandleExceptionAsync(HttpContext context, Exception exception)
         {
             context.Response.ContentType = "application/json";
+            if (exception is UpstreamRateLimitException { RetryAfter: { } retryAfter })
+                context.Response.Headers.RetryAfter = Math.Max(1, Math.Ceiling(retryAfter.TotalSeconds))
+                    .ToString(System.Globalization.CultureInfo.InvariantCulture);
             context.Response.StatusCode = exception switch
             {
                 AssetNotFoundException => (int)HttpStatusCode.NotFound,
+                HistoricalDataUnavailableException => (int)HttpStatusCode.UnprocessableEntity,
                 UpstreamRateLimitException => (int)HttpStatusCode.TooManyRequests,
                 MarketDataProviderException => (int)HttpStatusCode.BadGateway,
                 BrokenCircuitException => (int)HttpStatusCode.ServiceUnavailable,
@@ -55,7 +61,7 @@ namespace CryptoRiskAnalysis.API.Middleware
             // In production, hide the exception message for security
             string message = exception switch
             {
-                AssetNotFoundException or UpstreamRateLimitException => exception.Message,
+                AssetNotFoundException or UpstreamRateLimitException or HistoricalDataUnavailableException => exception.Message,
                 MarketDataProviderException => "Market data provider is temporarily unavailable.",
                 BrokenCircuitException => "Market data provider is temporarily unavailable.",
                 TimeoutRejectedException or TimeoutException => "Market data request timed out.",

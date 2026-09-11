@@ -3,6 +3,20 @@ import { ApiRequestError, getErrorMessage, getRiskAnalysis } from './api';
 
 afterEach(() => vi.unstubAllGlobals());
 
+it('manual refresh explicitly asks the backend for a fresh quote', async () => {
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue(
+      new Response(JSON.stringify({ succeeded: true, data: { currentPrice: 100 } }))
+    );
+  vi.stubGlobal('fetch', fetchMock);
+  await getRiskAnalysis('bitcoin', 90, undefined, true);
+  expect(fetchMock).toHaveBeenCalledWith(
+    expect.stringContaining('/RiskAnalysis/bitcoin?days=90&refresh=true'),
+    expect.any(Object)
+  );
+});
+
 describe('getRiskAnalysis', () => {
   it('encodes asset IDs, sends the selected range and forwards the abort signal', async () => {
     const data = {

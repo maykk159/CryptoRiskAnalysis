@@ -13,6 +13,10 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly IMemoryCache _cache;
         private readonly ILogger<CoinGeckoService> _logger;
         private readonly MarketDataRequestLock _requestLock;
+        private readonly IHistoricalMarketDataStore? _historyStore;
+        internal Task<MarketQuote> GetCurrentQuoteAsync(string assetId, TimeProvider clock, CancellationToken cancellationToken) =>
+            MarketQuoteReader.ReadAsync(_httpClient, assetId, MarketDataSource.CoinGecko, clock, cancellationToken);
+
         private const string BaseUrl = "https://api.coingecko.com/api/v3";
         private const int CacheDurationSeconds = 60;
         private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
@@ -23,12 +27,14 @@ namespace CryptoRiskAnalysis.API.Services
             HttpClient httpClient,
             IMemoryCache cache,
             ILogger<CoinGeckoService> logger,
-            MarketDataRequestLock? requestLock = null)
+            MarketDataRequestLock? requestLock = null,
+            IHistoricalMarketDataStore? historyStore = null)
         {
             _httpClient = httpClient;
             _cache = cache;
             _logger = logger;
             _requestLock = requestLock ?? new MarketDataRequestLock();
+            _historyStore = historyStore;
         }
 
         /// <summary>
@@ -37,7 +43,7 @@ namespace CryptoRiskAnalysis.API.Services
         /// Previously: 429 was silently returning an empty list, hiding the error from the caller.
         /// Now: typed exceptions preserve provider failure details for the middleware.
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        public async Task<MarketDataSnapshot> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default)
@@ -48,17 +54,19 @@ namespace CryptoRiskAnalysis.API.Services
             string cacheKey = $"market_data_{assetId}_{days}";
 
             // Check cache first
-            if (_cache.TryGetValue(cacheKey, out (List<PriceData>, decimal, decimal, decimal) cachedData))
+            if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("CoinGecko Cache HIT for {AssetId}", assetId);
-                return cachedData;
+                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
+                return cachedData.Data;
             }
 
             using var requestLease = await _requestLock.AcquireAsync(cacheKey, cancellationToken);
-            if (_cache.TryGetValue(cacheKey, out cachedData))
+            if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("CoinGecko Cache HIT after waiting for {AssetId}", assetId);
-                return cachedData;
+                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
+                return cachedData.Data;
             }
 
             _logger.LogInformation("CoinGecko Cache MISS for {AssetId} — fetching from API", assetId);
@@ -69,7 +77,7 @@ namespace CryptoRiskAnalysis.API.Services
             try
             {
                 response = await _httpClient.GetAsync(
-                    $"{BaseUrl}/coins/{assetId}/market_chart?vs_currency=usd&days={providerDays}&interval=daily",
+                    $"{BaseUrl}/coins/{Uri.EscapeDataString(assetId)}/market_chart?vs_currency=usd&days={providerDays}&interval=daily",
                     cancellationToken);
             }
             catch (HttpRequestException ex)
@@ -83,7 +91,8 @@ namespace CryptoRiskAnalysis.API.Services
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
                     throw new AssetNotFoundException(assetId);
                 if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                    throw new UpstreamRateLimitException("CoinGecko");
+                    throw new UpstreamRateLimitException("CoinGecko", response.Headers.RetryAfter?.Delta
+                        ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow));
                 if (!response.IsSuccessStatusCode)
                     throw new MarketDataProviderException("CoinGecko", response.StatusCode);
 
@@ -130,10 +139,16 @@ namespace CryptoRiskAnalysis.API.Services
                 var currentVolume = volumeHistory[^1].Volume;
                 var avgVolume = volumeHistory.Average(point => point.Volume);
 
-                var result = (priceHistory, currentPrice, currentVolume, avgVolume);
+                var result = new MarketDataSnapshot(priceHistory, currentPrice, currentVolume, avgVolume, MarketDataSource.CoinGecko);
+
+                var cacheEntry = new CachedMarketData(result,
+                        priceHistory.Select((p, i) => new DailyMarketObservation(
+                            DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(p.Timestamp).UtcDateTime),
+                            p.Timestamp, p.Price, volumeHistory[i].Volume)).ToList());
+                await cacheEntry.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
 
                 // Keep the displayed current price no more than one application-cache minute old.
-                _cache.Set(cacheKey, result, new MemoryCacheEntryOptions()
+                _cache.Set(cacheKey, cacheEntry, new MemoryCacheEntryOptions()
                     .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
 
                 _logger.LogInformation("CoinGecko: Fetched {PriceCount} prices for {AssetId} — cached for {Duration}s",
@@ -144,13 +159,11 @@ namespace CryptoRiskAnalysis.API.Services
         }
 
 
-        private static decimal ReadCurrentPrice(IEnumerable<List<double>> values)
+        private static decimal ReadCurrentPrice(IEnumerable<List<decimal>> values)
         {
             var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var latestValue = values
-                .Where(value => value.Count >= 2 &&
-                                double.IsFinite(value[0]) &&
-                                double.IsFinite(value[1]) &&
+                .Where(value => value is { Count: >= 2 } &&
                                 value[0] <= nowUnixMilliseconds)
                 .OrderBy(value => value[0])
                 .LastOrDefault();
@@ -160,12 +173,12 @@ namespace CryptoRiskAnalysis.API.Services
 
             try
             {
-                if (Math.Truncate(latestValue[0]) != latestValue[0])
+                if (decimal.Truncate(latestValue[0]) != latestValue[0])
                     throw new OverflowException("Timestamp was not an integer.");
 
                 var timestamp = checked((long)latestValue[0]);
                 _ = DateTimeOffset.FromUnixTimeMilliseconds(timestamp);
-                var currentPrice = checked((decimal)latestValue[1]);
+                var currentPrice = latestValue[1];
 
                 if (currentPrice <= 0)
                     throw new MarketDataProviderException("CoinGecko", "the current price was zero or negative.");
@@ -180,7 +193,7 @@ namespace CryptoRiskAnalysis.API.Services
         }
 
         private static IEnumerable<DailyValue> NormalizeCompletedDailyValues(
-            IEnumerable<List<double>> values,
+            IEnumerable<List<decimal>> values,
             MarketField field)
         {
             var fieldName = field.ToString().ToLowerInvariant(); // used only in error messages
@@ -189,7 +202,7 @@ namespace CryptoRiskAnalysis.API.Services
 
             foreach (var value in values)
             {
-                if (value.Count < 2 || !double.IsFinite(value[0]) || !double.IsFinite(value[1]))
+                if (value is null || value.Count < 2)
                 {
                     throw new MarketDataProviderException(
                         "CoinGecko",
@@ -198,12 +211,12 @@ namespace CryptoRiskAnalysis.API.Services
 
                 try
                 {
-                    if (Math.Truncate(value[0]) != value[0])
+                    if (decimal.Truncate(value[0]) != value[0])
                         throw new OverflowException("Timestamp was not an integer.");
 
                     var timestamp = checked((long)value[0]);
                     var date = DateTimeOffset.FromUnixTimeMilliseconds(timestamp).UtcDateTime.Date;
-                    var numericValue = checked((decimal)value[1]);
+                    var numericValue = value[1];
 
                     if (field == MarketField.Price && numericValue <= 0)
                         throw new MarketDataProviderException("CoinGecko", "a price observation was zero or negative.");
@@ -234,8 +247,8 @@ namespace CryptoRiskAnalysis.API.Services
         // Helper class for deserialization
         private class CoinGeckoMarketChart
         {
-            public List<List<double>>? Prices { get; set; }
-            public List<List<double>>? Total_Volumes { get; set; }
+            public List<List<decimal>>? Prices { get; set; }
+            public List<List<decimal>>? Total_Volumes { get; set; }
         }
     }
 }

@@ -23,10 +23,25 @@ namespace CryptoRiskAnalysis.Tests.Controllers
             _mockCryptoService = new Mock<ICryptoDataService>();
             _mockRiskEngine = new Mock<IRiskEngine>();
             _mockLogger = new Mock<ILogger<RiskAnalysisController>>();
+            var quotes = new Mock<ICurrentQuoteService>();
+            quotes.Setup(q => q.GetAsync(It.IsAny<string>(), It.IsAny<MarketDataSource>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+                .ReturnsAsync(new MarketQuote(123.45m, "Binance", "USDT", DateTimeOffset.UtcNow, null));
             _controller = new RiskAnalysisController(
                 _mockCryptoService.Object,
                 _mockRiskEngine.Object,
-                _mockLogger.Object);
+                _mockLogger.Object, quotes.Object);
+        }
+
+        [Theory]
+        [InlineData("bitcoin\r\nforged log")]
+        [InlineData("bitcoin\u2028forged log")]
+        [InlineData("bitcoin\u001b[31m")]
+        public async Task GetRiskAnalysis_ControlCharacters_AreRejectedBeforeLogging(string assetId)
+        {
+            var result = await _controller.GetRiskAnalysis(assetId, 30, TestContext.Current.CancellationToken);
+            Assert.IsType<BadRequestObjectResult>(result.Result);
+            _mockCryptoService.VerifyNoOtherCalls();
+            _mockLogger.VerifyNoOtherCalls();
         }
 
         [Fact]

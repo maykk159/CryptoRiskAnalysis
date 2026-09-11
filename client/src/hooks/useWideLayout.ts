@@ -1,15 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useMediaQuery } from './useMediaQuery';
 
-const query = '(min-width: 1024px)';
-function subscribe(onChange: () => void) {
-  const media = window.matchMedia(query);
-  media.addEventListener('change', onChange);
-  return () => media.removeEventListener('change', onChange);
-}
 export function useWideLayout() {
-  return useSyncExternalStore(
-    subscribe,
-    () => window.matchMedia(query).matches,
-    () => false
-  );
+  return useMediaQuery('(min-width: 1024px)');
 }

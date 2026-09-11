@@ -16,8 +16,9 @@ import { createChartModel } from '../utils/priceChartModel';
 interface PriceChartProps {
   data: PriceData[];
   timeRange: number;
+  currency?: string;
 }
-export function PriceChart({ data, timeRange }: PriceChartProps) {
+export function PriceChart({ data, timeRange, currency = 'USD' }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const id = useId();
   const [dimensions, setDimensions] = useState({ width: 1000, height: 310 });
@@ -27,7 +28,10 @@ export function PriceChart({ data, timeRange }: PriceChartProps) {
   );
 
   // Receipt of the same historical series must not restart interaction or animation.
-  const signature = JSON.stringify(model?.points.map(({ timestamp, price }) => [timestamp, price]));
+  const signature = useMemo(
+    () => JSON.stringify(model?.points.map(({ timestamp, price }) => [timestamp, price])),
+    [model]
+  );
   const [inspection, setInspection] = useState<{
     signature: string | undefined;
     index: number;
@@ -97,7 +101,7 @@ export function PriceChart({ data, timeRange }: PriceChartProps) {
           </p>
         </div>
         <span className="hidden rounded-md border border-line bg-raised px-2 py-1 text-xs font-semibold text-accent sm:block">
-          USD
+          {currency}
         </span>
       </div>
       <div ref={containerRef} className="chart-canvas relative min-w-0">

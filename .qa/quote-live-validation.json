@@ -1,0 +1,87 @@
+﻿[
+    {
+        "query":  "days=30",
+        "currentPrice":  77356.00000000,
+        "quote":  {
+                      "price":  77356.00000000,
+                      "source":  "Binance",
+                      "currency":  "USDT",
+                      "fetchedAt":  "2026-09-11T08:29:03.6987366+00:00",
+                      "sourceUpdatedAt":  null
+                  },
+        "observations":  30,
+        "lastCompleted":  {
+                              "timestamp":  1788998400000,
+                              "price":  76568.72000000
+                          },
+        "cacheControl":  "no-store"
+    },
+    {
+        "query":  "days=90",
+        "currentPrice":  77367.80000000,
+        "quote":  {
+                      "price":  77367.80000000,
+                      "source":  "Binance",
+                      "currency":  "USDT",
+                      "fetchedAt":  "2026-09-11T08:29:14.0313587+00:00",
+                      "sourceUpdatedAt":  null
+                  },
+        "observations":  90,
+        "lastCompleted":  {
+                              "timestamp":  1788998400000,
+                              "price":  76568.72000000
+                          },
+        "cacheControl":  "no-store"
+    },
+    {
+        "query":  "days=7",
+        "currentPrice":  77367.80000000,
+        "quote":  {
+                      "price":  77367.80000000,
+                      "source":  "Binance",
+                      "currency":  "USDT",
+                      "fetchedAt":  "2026-09-11T08:29:14.0313587+00:00",
+                      "sourceUpdatedAt":  null
+                  },
+        "observations":  7,
+        "lastCompleted":  {
+                              "timestamp":  1788998400000,
+                              "price":  76568.72000000
+                          },
+        "cacheControl":  "no-store"
+    },
+    {
+        "query":  "days=30\u0026refresh=true",
+        "currentPrice":  77367.80000000,
+        "quote":  {
+                      "price":  77367.80000000,
+                      "source":  "Binance",
+                      "currency":  "USDT",
+                      "fetchedAt":  "2026-09-11T08:29:14.3226316+00:00",
+                      "sourceUpdatedAt":  null
+                  },
+        "observations":  30,
+        "lastCompleted":  {
+                              "timestamp":  1788998400000,
+                              "price":  76568.72000000
+                          },
+        "cacheControl":  "no-store"
+    },
+    {
+        "query":  "days=90",
+        "currentPrice":  77367.80000000,
+        "quote":  {
+                      "price":  77367.80000000,
+                      "source":  "Binance",
+                      "currency":  "USDT",
+                      "fetchedAt":  "2026-09-11T08:29:14.3226316+00:00",
+                      "sourceUpdatedAt":  null
+                  },
+        "observations":  90,
+        "lastCompleted":  {
+                              "timestamp":  1788998400000,
+                              "price":  76568.72000000
+                          },
+        "cacheControl":  "no-store"
+    }
+]

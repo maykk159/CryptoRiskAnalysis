@@ -18,7 +18,7 @@ export function CryptoAssetIcon({ asset, size = 'small' }: CryptoAssetIconProps)
           {asset.ticker.slice(0, 2).toUpperCase()}
         </span>
       )}
-      {failedUrl !== asset.icon && (
+      {asset.icon.trim() !== '' && failedUrl !== asset.icon && (
         <img
           src={asset.icon}
           alt={ready ? `${asset.name} icon` : ''}
