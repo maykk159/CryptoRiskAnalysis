@@ -118,8 +118,14 @@ public class CurrentQuoteServiceTests
             Assert.Equal("/api/v3/simple/price", request.RequestUri!.AbsolutePath);
             Assert.Contains("include_last_updated_at=true", request.RequestUri.Query);
             Assert.Contains("ids=bitcoin", request.RequestUri.Query);
-            return Task.FromResult(Json(new { bitcoin = new { usd = 0.000007651234567890123456789m,
-                last_updated_at = clock.GetUtcNow().AddSeconds(-20).ToUnixTimeSeconds() } }));
+            return Task.FromResult(Json(new
+            {
+                bitcoin = new
+                {
+                    usd = 0.000007651234567890123456789m,
+                    last_updated_at = clock.GetUtcNow().AddSeconds(-20).ToUnixTimeSeconds()
+                }
+            }));
         }, clock);
         var quote = await fixture.Quotes.GetAsync("bitcoin", MarketDataSource.CoinGecko, false, Token);
         Assert.Equal("CoinGecko", quote.Source);
@@ -158,8 +164,14 @@ public class CurrentQuoteServiceTests
     public async Task StaleOrFutureCoinGeckoTimestampIsRejected(int age)
     {
         var clock = new Clock();
-        using var fixture = new Fixture((_, _) => Task.FromResult(Json(new { bitcoin = new { usd = 100m,
-            last_updated_at = clock.GetUtcNow().AddSeconds(age).ToUnixTimeSeconds() } })), clock);
+        using var fixture = new Fixture((_, _) => Task.FromResult(Json(new
+        {
+            bitcoin = new
+            {
+                usd = 100m,
+                last_updated_at = clock.GetUtcNow().AddSeconds(age).ToUnixTimeSeconds()
+            }
+        })), clock);
         await Assert.ThrowsAsync<MarketDataProviderException>(() =>
             fixture.Quotes.GetAsync("bitcoin", MarketDataSource.CoinGecko, false, Token));
     }
@@ -169,8 +181,14 @@ public class CurrentQuoteServiceTests
     {
         var clock = new Clock();
         var budget = new CoinGeckoRequestBudget(Options.Create(new CoinGeckoOptions { RequestsPerMinute = 1 }), clock);
-        using var fixture = new Fixture((_, _) => Task.FromResult(Json(new { bitcoin = new { usd = 100m,
-            last_updated_at = clock.GetUtcNow().ToUnixTimeSeconds() } })), clock, budget);
+        using var fixture = new Fixture((_, _) => Task.FromResult(Json(new
+        {
+            bitcoin = new
+            {
+                usd = 100m,
+                last_updated_at = clock.GetUtcNow().ToUnixTimeSeconds()
+            }
+        })), clock, budget);
         await fixture.Quotes.GetAsync("bitcoin", MarketDataSource.CoinGecko, false, Token);
         var error = await Assert.ThrowsAsync<UpstreamRateLimitException>(() =>
             fixture.Quotes.GetAsync("bitcoin", MarketDataSource.CoinGecko, true, Token));
@@ -196,7 +214,7 @@ public class CurrentQuoteServiceTests
     }
 
     private static HttpResponseMessage Json(object value) => new(HttpStatusCode.OK)
-        { Content = new StringContent(JsonSerializer.Serialize(value)) };
+    { Content = new StringContent(JsonSerializer.Serialize(value)) };
     private sealed class Handler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) => send(request, token);
