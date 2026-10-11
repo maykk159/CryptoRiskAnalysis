@@ -71,12 +71,21 @@ namespace CryptoRiskAnalysis.API.Services
 
             _logger.LogInformation("CoinGecko Cache MISS for {AssetId} — fetching from API", assetId);
 
+            using var response = await FetchResponseAsync(assetId, days, cancellationToken);
+            ValidateResponse(response, assetId);
+            var cacheEntry = await ReadMarketDataAsync(response, days, cancellationToken);
+            await PersistAndCacheAsync(cacheKey, assetId, cacheEntry, cancellationToken);
+            return cacheEntry.Data;
+        }
+
+        private async Task<HttpResponseMessage> FetchResponseAsync(
+            string assetId, int days, CancellationToken cancellationToken)
+        {
             // Request one extra day because CoinGecko may include today's still-open UTC candle.
             var providerDays = days + 1;
-            HttpResponseMessage response;
             try
             {
-                response = await _httpClient.GetAsync(
+                return await _httpClient.GetAsync(
                     $"{BaseUrl}/coins/{Uri.EscapeDataString(assetId)}/market_chart?vs_currency=usd&days={providerDays}&interval=daily",
                     cancellationToken);
             }
@@ -84,80 +93,91 @@ namespace CryptoRiskAnalysis.API.Services
             {
                 throw new MarketDataProviderException("CoinGecko", ex);
             }
-
-            using (response)
-            {
-
-                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                    throw new AssetNotFoundException(assetId);
-                if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-                    throw new UpstreamRateLimitException("CoinGecko", response.Headers.RetryAfter?.Delta
-                        ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow));
-                if (!response.IsSuccessStatusCode)
-                    throw new MarketDataProviderException("CoinGecko", response.StatusCode);
-
-                var content = await response.Content.ReadAsStringAsync(cancellationToken);
-                CoinGeckoMarketChart? data;
-                try
-                {
-                    data = JsonSerializer.Deserialize<CoinGeckoMarketChart>(content, JsonOptions);
-                }
-                catch (JsonException ex)
-                {
-                    throw new MarketDataProviderException("CoinGecko", "response was not valid JSON.", ex);
-                }
-
-                if (data?.Prices == null || data.Total_Volumes == null)
-                {
-                    throw new MarketDataProviderException("CoinGecko", "the price or volume series was missing.");
-                }
-
-
-                var currentPrice = ReadCurrentPrice(data.Prices);
-                // CoinGecko can append a live intraday point even when daily granularity is
-                // requested. Keep UTC-midnight daily points and completed previous days only.
-                var normalizedPrices = NormalizeCompletedDailyValues(data.Prices, MarketField.Price)
-                    .TakeLast(days)
-                    .ToList();
-                var normalizedVolumes = NormalizeCompletedDailyValues(data.Total_Volumes, MarketField.Volume)
-                    .TakeLast(days)
-                    .ToList();
-
-                var priceHistory = normalizedPrices
-                    .Select(point => new PriceData
-                    {
-                        Timestamp = point.Timestamp,
-                        Price = point.Value
-                    })
-                    .ToList();
-                var volumeHistory = normalizedVolumes
-                    .Select(point => (point.Timestamp, Volume: point.Value))
-                    .ToList();
-
-                MarketDataValidator.ValidateCompletedDailySeries("CoinGecko", priceHistory, volumeHistory, days);
-
-                var currentVolume = volumeHistory[^1].Volume;
-                var avgVolume = volumeHistory.Average(point => point.Volume);
-
-                var result = new MarketDataSnapshot(priceHistory, currentPrice, currentVolume, avgVolume, MarketDataSource.CoinGecko);
-
-                var cacheEntry = new CachedMarketData(result,
-                        priceHistory.Select((p, i) => new DailyMarketObservation(
-                            DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeMilliseconds(p.Timestamp).UtcDateTime),
-                            p.Timestamp, p.Price, volumeHistory[i].Volume)).ToList());
-                await cacheEntry.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
-
-                // Keep the displayed current price no more than one application-cache minute old.
-                _cache.Set(cacheKey, cacheEntry, new MemoryCacheEntryOptions()
-                    .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
-
-                _logger.LogInformation("CoinGecko: Fetched {PriceCount} prices for {AssetId} — cached for {Duration}s",
-                    priceHistory.Count, assetId, CacheDurationSeconds);
-
-                return result;
-            }
         }
 
+        private static void ValidateResponse(HttpResponseMessage response, string assetId)
+        {
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                throw new AssetNotFoundException(assetId);
+            if (response.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+                throw new UpstreamRateLimitException("CoinGecko", response.Headers.RetryAfter?.Delta
+                    ?? (response.Headers.RetryAfter?.Date - DateTimeOffset.UtcNow));
+            if (!response.IsSuccessStatusCode)
+                throw new MarketDataProviderException("CoinGecko", response.StatusCode);
+        }
+
+        private static async Task<CachedMarketData> ReadMarketDataAsync(
+            HttpResponseMessage response, int days, CancellationToken cancellationToken)
+        {
+            var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var (prices, volumes) = DeserializeMarketChart(content);
+            return BuildDailyMarketData(prices, volumes, days);
+        }
+
+        private static (List<List<decimal>> Prices, List<List<decimal>> Volumes) DeserializeMarketChart(string content)
+        {
+            CoinGeckoMarketChart? data;
+            try
+            {
+                data = JsonSerializer.Deserialize<CoinGeckoMarketChart>(content, JsonOptions);
+            }
+            catch (JsonException ex)
+            {
+                throw new MarketDataProviderException("CoinGecko", "response was not valid JSON.", ex);
+            }
+
+            if (data?.Prices == null || data.Total_Volumes == null)
+            {
+                throw new MarketDataProviderException("CoinGecko", "the price or volume series was missing.");
+            }
+            return (data.Prices, data.Total_Volumes);
+        }
+
+        private static CachedMarketData BuildDailyMarketData(
+            List<List<decimal>> prices, List<List<decimal>> volumes, int days)
+        {
+            var currentPrice = ReadCurrentPrice(prices);
+            // CoinGecko can append a live intraday point even when daily granularity is
+            // requested. Keep UTC-midnight daily points and completed previous days only.
+            var normalizedPrices = NormalizeCompletedDailyValues(prices, MarketField.Price)
+                .TakeLast(days)
+                .ToList();
+            var normalizedVolumes = NormalizeCompletedDailyValues(volumes, MarketField.Volume)
+                .TakeLast(days)
+                .ToList();
+
+            var priceHistory = normalizedPrices
+                .Select(point => new PriceData
+                {
+                    Timestamp = point.Timestamp,
+                    Price = point.Value
+                })
+                .ToList();
+            var volumeHistory = normalizedVolumes
+                .Select(point => (point.Timestamp, Volume: point.Value))
+                .ToList();
+
+            MarketDataValidator.ValidateCompletedDailySeries("CoinGecko", priceHistory, volumeHistory, days);
+
+            var currentVolume = volumeHistory[^1].Volume;
+            var avgVolume = volumeHistory.Average(point => point.Volume);
+
+            var result = new MarketDataSnapshot(priceHistory, currentPrice, currentVolume, avgVolume, MarketDataSource.CoinGecko);
+            return CachedMarketData.Create(result, volumeHistory);
+        }
+
+        private async Task PersistAndCacheAsync(string cacheKey, string assetId,
+            CachedMarketData cacheEntry, CancellationToken cancellationToken)
+        {
+            await cacheEntry.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
+
+            // Keep the displayed current price no more than one application-cache minute old.
+            _cache.Set(cacheKey, cacheEntry, new MemoryCacheEntryOptions()
+                .SetAbsoluteExpiration(TimeSpan.FromSeconds(CacheDurationSeconds)));
+
+            _logger.LogInformation("CoinGecko: Fetched {PriceCount} prices for {AssetId} — cached for {Duration}s",
+                cacheEntry.Data.priceHistory.Count, assetId, CacheDurationSeconds);
+        }
 
         private static decimal ReadCurrentPrice(IEnumerable<List<decimal>> values)
         {

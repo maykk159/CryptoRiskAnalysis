@@ -78,6 +78,12 @@ The API follows a layered structure:
 - **Risk engine:** performs all calculations locally after market data has been retrieved.
 - **Middleware:** maps provider and application exceptions to appropriate HTTP responses.
 
+The frontend keeps rendering separate from stateful behavior:
+
+- [Dashboard](client/src/components/Dashboard.tsx) composes the controls, cards, chart, and recovery states. [useRiskAnalysis](client/src/hooks/useRiskAnalysis.ts) owns polling and manual refresh; [useAnalysisUrlState](client/src/hooks/useAnalysisUrlState.ts) owns browser navigation.
+- [usePriceChart](client/src/hooks/usePriceChart.ts) owns chart sizing and pointer/keyboard inspection, using the pure [chart model](client/src/utils/priceChartModel.ts) for coordinates. [PriceChart](client/src/components/PriceChart.tsx) renders the SVG and tooltip.
+- [usePriceFlash](client/src/hooks/usePriceFlash.ts) owns price-change direction and timer cleanup. [RiskDial](client/src/components/dashboard/RiskDial.tsx) renders the gauge, while [RiskScoreCard](client/src/components/dashboard/RiskScoreCard.tsx) coordinates animation and the responsive breakdown.
+
 ### Provider behavior
 
 | Capability | Binance | CoinGecko |

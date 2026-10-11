@@ -67,6 +67,8 @@ public class CurrentQuoteServiceTests
     [Fact]
     public async Task ConcurrentRequestsAndAliasesShareOneTickerFetch()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
         var calls = 0;
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -77,14 +79,25 @@ public class CurrentQuoteServiceTests
             await release.Task.WaitAsync(token);
             return Json(new { symbol = "POLUSDT", price = "0.1234567890123456789012345678" });
         });
-        var first = fixture.Quotes.GetAsync("matic-network", MarketDataSource.Binance, true, Token);
-        await started.Task.WaitAsync(Token);
-        var second = fixture.Quotes.GetAsync("polygon-ecosystem-token", MarketDataSource.Binance, true, Token);
-        release.SetResult();
-        var results = await Task.WhenAll(first, second);
-        Assert.Equal(1, calls);
-        Assert.Equal(results[0], results[1]);
-        Assert.Equal(0.1234567890123456789012345678m, results[0].Price);
+        var first = fixture.Quotes.GetAsync("matic-network", MarketDataSource.Binance, true, deadline.Token);
+        try
+        {
+            await started.Task.WaitAsync(deadline.Token);
+            var second = fixture.Quotes.GetAsync("polygon-ecosystem-token", MarketDataSource.Binance, true, deadline.Token);
+            Assert.False(first.IsCompleted);
+            Assert.False(second.IsCompleted);
+            Assert.Equal(1, calls);
+            release.TrySetResult();
+            var results = await Task.WhenAll(first, second).WaitAsync(deadline.Token);
+            Assert.Equal(1, calls);
+            Assert.Equal(results[0], results[1]);
+            Assert.Equal(0.1234567890123456789012345678m, results[0].Price);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await deadline.CancelAsync();
+        }
     }
 
     [Fact]
@@ -198,6 +211,8 @@ public class CurrentQuoteServiceTests
     [Fact]
     public async Task CancellationReleasesQuoteLock()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
         using var fixture = new Fixture(async (_, token) =>
@@ -205,12 +220,21 @@ public class CurrentQuoteServiceTests
             if (++calls == 1) { started.SetResult(); await Task.Delay(Timeout.Infinite, token); }
             return Json(new { symbol = "BTCUSDT", price = "100" });
         });
-        using var cancel = new CancellationTokenSource();
+        using var cancel = CancellationTokenSource.CreateLinkedTokenSource(deadline.Token);
         var first = fixture.Quotes.GetAsync("bitcoin", MarketDataSource.Binance, true, cancel.Token);
-        await started.Task.WaitAsync(Token);
-        cancel.Cancel();
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
-        Assert.Equal(100m, (await fixture.Quotes.GetAsync("bitcoin", MarketDataSource.Binance, true, Token)).Price);
+        try
+        {
+            await started.Task.WaitAsync(deadline.Token);
+            cancel.Cancel();
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first.WaitAsync(deadline.Token));
+            Assert.Equal(100m, (await fixture.Quotes.GetAsync("bitcoin", MarketDataSource.Binance, true, deadline.Token)
+                .WaitAsync(deadline.Token)).Price);
+        }
+        finally
+        {
+            await cancel.CancelAsync();
+            await deadline.CancelAsync();
+        }
     }
 
     private static HttpResponseMessage Json(object value) => new(HttpStatusCode.OK)

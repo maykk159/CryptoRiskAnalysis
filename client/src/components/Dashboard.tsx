@@ -1,9 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
-import { useRef } from 'react';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
-import { getRiskAnalysis, getErrorMessage } from '../services/api';
+import { getErrorMessage } from '../services/api';
 import { ASSETS } from '../constants/assets';
 import { useAnalysisUrlState } from '../hooks/useAnalysisUrlState';
+import { useRiskAnalysis } from '../hooks/useRiskAnalysis';
 import { TimeRangeSelector } from './dashboard/TimeRangeSelector';
 import { AssetSelector } from './AssetSelector';
 import { RiskScoreCard } from './dashboard/RiskScoreCard';
@@ -14,7 +13,6 @@ import { AssetSummary } from './dashboard/AssetSummary';
 import { PriceChart } from './PriceChart';
 
 export function Dashboard() {
-  const refreshRequested = useRef(false);
   const {
     assetId: selectedAssetId,
     days: selectedTimeRange,
@@ -32,29 +30,12 @@ export function Dashboard() {
     data,
     isPending,
     isFetching,
-    fetchStatus,
+    paused,
     error,
     isRefetchError,
-    refetch,
+    retryAnalysis,
     dataUpdatedAt,
-  } = useQuery({
-    queryKey: ['risk', selectedAssetId, selectedTimeRange],
-    queryFn: ({ signal }) => {
-      const refresh = refreshRequested.current;
-      refreshRequested.current = false;
-      return refresh
-        ? getRiskAnalysis(selectedAssetId, selectedTimeRange, signal, true)
-        : getRiskAnalysis(selectedAssetId, selectedTimeRange, signal);
-    },
-    staleTime: 0,
-    refetchInterval: 10_000,
-  });
-  const paused = fetchStatus === 'paused';
-  const retryAnalysis = () => {
-    if (isFetching || paused) return;
-    refreshRequested.current = true;
-    void refetch({ cancelRefetch: false });
-  };
+  } = useRiskAnalysis(selectedAssetId, selectedTimeRange);
   return (
     <div className="min-h-screen bg-canvas px-4 py-5 text-ink sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1280px]">

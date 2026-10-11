@@ -6,61 +6,30 @@ namespace CryptoRiskAnalysis.API.Services;
 /// <summary>Deterministic daily indicators; see docs/risk-methodology.md.</summary>
 public class RiskAnalysisEngine(ILogger<RiskAnalysisEngine> logger) : IRiskEngine
 {
-    public const string MethodologyVersion = "2.0.0";
+    public const string MethodologyVersion = RiskMethodology.Version;
     private static readonly double Annualization = Math.Sqrt(365);
 
     public RiskScoreResult CalculateRisk(List<PriceData> priceHistory, decimal currentVolume, decimal averageVolume)
     {
         ArgumentNullException.ThrowIfNull(priceHistory);
         ValidateInputs(priceHistory, currentVolume, averageVolume);
-        var history = priceHistory.Select(p => new PriceData { Timestamp = p.Timestamp, Price = p.Price }).ToList();
-        var prices = history.Select(p => p.Price).ToList();
-        var returns = new List<double>(prices.Count - 1);
-        for (var i = 1; i < prices.Count; i++)
-            returns.Add(Math.Log((double)prices[i] / (double)prices[i - 1]));
-
+        var (history, maximum) = CreatePriceSnapshot(priceHistory);
+        var returns = CalculateLogReturns(history);
         var mean = returns.Average();
-        var stdDev = Math.Sqrt(returns.Sum(r => (r - mean) * (r - mean)) / (returns.Count - 1));
+        var stdDev = CalculateSampleStandardDeviation(returns, mean);
         var annualizedVolatility = (decimal)(stdDev * Annualization);
-        var volatilityScore = annualizedVolatility switch
-        {
-            < 0.5m => annualizedVolatility * 100m,
-            < 1m => 50m + (annualizedVolatility - 0.5m) * 50m,
-            _ => Math.Min(100m, 75m + (annualizedVolatility - 1m) * 25m)
-        };
-        // Normalize before averaging to avoid decimal sum overflow; ratios are unchanged.
-        var maximum = prices.Max();
-        var normalized = prices.Select(p => (double)p / (double)maximum).ToList();
-        var recentCount = prices.Count >= 30 ? 7 : Math.Max(3, prices.Count / 3);
-        var momentum = (decimal)Math.Abs(normalized.TakeLast(recentCount).Average() / normalized.Average() - 1d);
-        var trendScore = momentum switch
-        {
-            <= 0.05m => momentum * 400m,
-            <= 0.15m => 20m + (momentum - 0.05m) * 300m,
-            <= 0.30m => 50m + (momentum - 0.15m) * 200m,
-            _ => Math.Min(100m, 80m + (momentum - 0.30m) * 200m)
-        };
-        var volumeScore = CalculateVolumeScore(prices, currentVolume, averageVolume);
+        var volatilityScore = CalculateVolatilityScore(annualizedVolatility);
+        var trendScore = CalculateTrendScore(history, maximum);
+        var volumeScore = CalculateVolumeScore(history, currentVolume, averageVolume);
         // Fixed weights avoid threshold-driven jumps and expose exact contributions.
-        var composite = Round(volatilityScore * 0.4m + trendScore * 0.3m + volumeScore * 0.3m);
-        var peak = prices[0];
-        var maxDrawdown = 0m;
-        foreach (var price in prices)
-        {
-            peak = Math.Max(peak, price);
-            maxDrawdown = Math.Max(maxDrawdown, (peak - price) / peak * 100m);
-        }
-        var quantile = returns.OrderBy(r => r).ElementAt((int)Math.Ceiling(returns.Count * 0.05d) - 1);
-        // Convert log return to an actual percentage loss, bounded by 100%.
-        var valueAtRisk = (decimal)(Math.Max(0d, 1d - Math.Exp(quantile)) * 100d);
-        decimal? sharpe = stdDev <= 1e-12 ? null : Round((decimal)(mean / stdDev * Annualization));
-        var warnings = new List<string>();
-        if (history.Count < 30)
-            warnings.Add("Short history: fewer than 30 daily prices; annualized estimates are unstable.");
-        if (returns.Count <= 20)
-            warnings.Add("Historical VaR uses the single worst observed return with 20 or fewer returns.");
-        if (sharpe is null)
-            warnings.Add("Sharpe ratio is unavailable because daily return variability is effectively zero.");
+        var volatilityContribution = volatilityScore * RiskMethodology.VolatilityWeight;
+        var trendContribution = trendScore * RiskMethodology.TrendWeight;
+        var volumeContribution = volumeScore * RiskMethodology.VolumeWeight;
+        var composite = Round(volatilityContribution + trendContribution + volumeContribution);
+        var maxDrawdown = CalculateMaximumDrawdown(history);
+        var valueAtRisk = CalculateHistoricalValueAtRisk95(returns);
+        var sharpe = CalculateSharpeRatio(mean, stdDev);
+        var warnings = CreateWarnings(history.Count, returns.Count, sharpe);
         logger.LogDebug("Risk methodology {Version}: composite {Score} from {Count} daily prices", MethodologyVersion, composite, history.Count);
         return new RiskScoreResult
         {
@@ -69,7 +38,7 @@ public class RiskAnalysisEngine(ILogger<RiskAnalysisEngine> logger) : IRiskEngin
             VolumeScore = Round(volumeScore),
             CompositeRiskScore = composite,
             AnnualizedVolatility = Round(annualizedVolatility * 100m),
-            DownsideRisk = Round((decimal)(Math.Sqrt(returns.Sum(r => Math.Pow(Math.Min(0d, r), 2)) / returns.Count) * Annualization * 100d)),
+            DownsideRisk = CalculateDownsideRisk(returns),
             MaxDrawdown = Round(maxDrawdown),
             SharpeRatio = sharpe,
             ValueAtRisk95 = Round(valueAtRisk),
@@ -81,13 +50,99 @@ public class RiskAnalysisEngine(ILogger<RiskAnalysisEngine> logger) : IRiskEngin
                 ReturnCount = returns.Count,
                 PeriodStart = history[0].Timestamp,
                 PeriodEnd = history[^1].Timestamp,
-                RiskLevel = composite < 30m ? "Low" : composite < 70m ? "Medium" : "High",
-                VolatilityContribution = volatilityScore * 0.4m,
-                TrendContribution = trendScore * 0.3m,
-                VolumeContribution = volumeScore * 0.3m,
+                RiskLevel = composite < RiskMethodology.MediumRiskThreshold ? "Low"
+                    : composite < RiskMethodology.HighRiskThreshold ? "Medium" : "High",
+                VolatilityContribution = volatilityContribution,
+                TrendContribution = trendContribution,
+                VolumeContribution = volumeContribution,
                 Warnings = warnings
             }
         };
+    }
+
+    private static (List<PriceData> History, decimal Maximum) CreatePriceSnapshot(List<PriceData> priceHistory)
+    {
+        // Keep an isolated result snapshot without allocating a second price-only list.
+        var history = new List<PriceData>(priceHistory.Count);
+        var maximum = 0m;
+        foreach (var observation in priceHistory)
+        {
+            var copy = new PriceData { Timestamp = observation.Timestamp, Price = observation.Price };
+            history.Add(copy);
+            maximum = Math.Max(maximum, copy.Price);
+        }
+        return (history, maximum);
+    }
+
+    private static List<double> CalculateLogReturns(List<PriceData> history)
+    {
+        var returns = new List<double>(history.Count - 1);
+        for (var i = 1; i < history.Count; i++)
+            returns.Add(Math.Log((double)history[i].Price / (double)history[i - 1].Price));
+        return returns;
+    }
+
+    private static double CalculateSampleStandardDeviation(List<double> returns, double mean) =>
+        Math.Sqrt(returns.Sum(r => (r - mean) * (r - mean)) / (returns.Count - 1));
+
+    private static decimal CalculateVolatilityScore(decimal annualizedVolatility) => annualizedVolatility switch
+    {
+        < 0.5m => annualizedVolatility * 100m,
+        < 1m => 50m + (annualizedVolatility - 0.5m) * 50m,
+        _ => Math.Min(100m, 75m + (annualizedVolatility - 1m) * 25m)
+    };
+
+    private static decimal CalculateTrendScore(List<PriceData> history, decimal maximum)
+    {
+        // Normalize before averaging to avoid decimal sum overflow; ratios are unchanged.
+        var normalized = history.Select(p => (double)p.Price / (double)maximum).ToList();
+        var recentCount = history.Count >= 30 ? 7 : Math.Max(3, history.Count / 3);
+        var momentum = (decimal)Math.Abs(normalized.TakeLast(recentCount).Average() / normalized.Average() - 1d);
+        return momentum switch
+        {
+            <= 0.05m => momentum * 400m,
+            <= 0.15m => 20m + (momentum - 0.05m) * 300m,
+            <= 0.30m => 50m + (momentum - 0.15m) * 200m,
+            _ => Math.Min(100m, 80m + (momentum - 0.30m) * 200m)
+        };
+    }
+
+    private static decimal CalculateMaximumDrawdown(List<PriceData> history)
+    {
+        var peak = history[0].Price;
+        var maxDrawdown = 0m;
+        foreach (var observation in history)
+        {
+            var price = observation.Price;
+            peak = Math.Max(peak, price);
+            maxDrawdown = Math.Max(maxDrawdown, (peak - price) / peak * 100m);
+        }
+        return maxDrawdown;
+    }
+
+    private static decimal CalculateHistoricalValueAtRisk95(List<double> returns)
+    {
+        var quantile = returns.OrderBy(r => r).ElementAt((int)Math.Ceiling(returns.Count * 0.05d) - 1);
+        // Convert log return to an actual percentage loss, bounded by 100%.
+        return (decimal)(Math.Max(0d, 1d - Math.Exp(quantile)) * 100d);
+    }
+
+    private static decimal? CalculateSharpeRatio(double mean, double stdDev) =>
+        stdDev <= 1e-12 ? null : Round((decimal)(mean / stdDev * Annualization));
+
+    private static decimal CalculateDownsideRisk(List<double> returns) =>
+        Round((decimal)(Math.Sqrt(returns.Sum(r => Math.Pow(Math.Min(0d, r), 2)) / returns.Count) * Annualization * 100d));
+
+    private static List<string> CreateWarnings(int observationCount, int returnCount, decimal? sharpe)
+    {
+        var warnings = new List<string>();
+        if (observationCount < 30)
+            warnings.Add("Short history: fewer than 30 daily prices; annualized estimates are unstable.");
+        if (returnCount <= 20)
+            warnings.Add("Historical VaR uses the single worst observed return with 20 or fewer returns.");
+        if (sharpe is null)
+            warnings.Add("Sharpe ratio is unavailable because daily return variability is effectively zero.");
+        return warnings;
     }
 
     private static void ValidateInputs(IReadOnlyList<PriceData> history, decimal currentVolume, decimal averageVolume)
@@ -115,7 +170,7 @@ public class RiskAnalysisEngine(ILogger<RiskAnalysisEngine> logger) : IRiskEngin
         }
     }
 
-    private static decimal CalculateVolumeScore(List<decimal> prices, decimal currentVolume, decimal averageVolume)
+    private static decimal CalculateVolumeScore(List<PriceData> history, decimal currentVolume, decimal averageVolume)
     {
         // Saturation at 6x; convert before dividing to avoid decimal overflow.
         var ratio = (decimal)Math.Min(6d, (double)currentVolume / (double)averageVolume);
@@ -127,8 +182,8 @@ public class RiskAnalysisEngine(ILogger<RiskAnalysisEngine> logger) : IRiskEngin
             <= 3m => 30m + (ratio - 1m) * 20m,
             _ => 70m + (ratio - 3m) * 10m
         };
-        if (prices.Count <= 7) return baseline;
-        var weeklyChange = (double)prices[^1] / (double)prices[^8] - 1d;
+        if (history.Count <= 7) return baseline;
+        var weeklyChange = (double)history[^1].Price / (double)history[^8].Price - 1d;
         // Context bonuses fade to zero at their boundaries.
         var sellingPressure = (decimal)Math.Clamp((-weeklyChange - 0.05d) * 300d, 0d, 60d)
             * Math.Clamp((ratio - 1.5m) / 1.5m, 0m, 1m);

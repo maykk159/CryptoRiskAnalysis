@@ -18,6 +18,39 @@ namespace CryptoRiskAnalysis.Tests.Extensions;
 
 public class ServiceCollectionExtensionsTests
 {
+    [Fact]
+    public void ApplicationServices_PreserveSharedInfrastructureAndScopedAnalysisServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var clock = new Moq.Mock<TimeProvider>().Object;
+        services.AddSingleton(clock);
+        services.AddApplicationServices();
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true
+        });
+        using var first = provider.CreateScope();
+        using var second = provider.CreateScope();
+
+        Assert.Same(clock, provider.GetRequiredService<TimeProvider>());
+        Assert.Same(first.ServiceProvider.GetRequiredService<MarketDataRequestLock>(),
+            second.ServiceProvider.GetRequiredService<MarketDataRequestLock>());
+        Assert.Same(first.ServiceProvider.GetRequiredService<CoinGeckoRequestBudget>(),
+            second.ServiceProvider.GetRequiredService<CoinGeckoRequestBudget>());
+
+        var firstEngine = first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.IRiskEngine>();
+        Assert.Same(firstEngine, first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.IRiskEngine>());
+        Assert.NotSame(firstEngine, second.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.IRiskEngine>());
+        var firstData = first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>();
+        Assert.Same(firstData, first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>());
+        Assert.NotSame(firstData, second.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>());
+        var firstQuotes = first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>();
+        Assert.Same(firstQuotes, first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>());
+        Assert.NotSame(firstQuotes, second.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>());
+    }
+
     [Theory]
     [InlineData(null, 443)]
     [InlineData("8443", 8443)]

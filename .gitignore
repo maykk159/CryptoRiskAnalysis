@@ -75,25 +75,25 @@ node_modules/
 .pnp.js
 
 # Testing
-/coverage
-/client/coverage/
+coverage/
 **/[Tt]est[Rr]esults/
 
 # Production build
 /build
-/dist
+dist/
+dist-ssr/
+*.tsbuildinfo
+.eslintcache
 *.local
 
 # Misc
 .DS_Store
 .env
-.env.local
-.env.development
-.env.test
-.env.production
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*
+!.env.example
+!.env.*.example
+!.env.sample
+!.env.template
 
 # Logs
 npm-debug.log*
@@ -137,28 +137,45 @@ $RECYCLE.BIN/
 
 # Cache files
 *.cache
+.cache/
 
-# Database files (if you add SQLite later)
+# Local databases and their journals
 *.db
-*.db-shm
-*.db-wal
+*.db-*
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
 
 # API Keys / Secrets
 appsettings.Development.json
 appsettings.Production.json
+appsettings.*.local.json
 secrets.json
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Local tool state and credentials
+.codex/
+.aws/
+.ssh/
+.gemini/
 
 # Temporary files
 *.tmp
 *.temp
 
-# Screenshots/Recordings (optional - keep if you want to track them)
-# *.png
-# *.webp
-# *.mp4
-
-# Antigravity brain artifacts (optional - uncomment if you don't want to track)
-# .gemini/
+# Local QA output. Only the archived portfolio gallery/report is versioned.
+/.qa/*
+!/.qa/cipher/
+/.qa/cipher/*
+!/.qa/cipher/README.md
+!/.qa/cipher/*.png
+!/.qa/cipher/browser-results.json
+!/.qa/cipher/states-results.json
+!/.qa/cipher/touch-results.json
 
 # ========================
 # Keep these files

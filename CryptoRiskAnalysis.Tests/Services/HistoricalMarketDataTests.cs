@@ -167,15 +167,43 @@ public sealed class HistoricalMarketDataTests : IDisposable
     [Fact]
     public async Task ConcurrentColdReads_CoalesceAndPersistTheProviderWindow()
     {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(Token);
+        deadline.CancelAfter(TimeSpan.FromSeconds(30));
         using var store = new SqliteHistoricalMarketDataStore(_path);
         var calls = 0;
-        using var handler = new StubHandler(_ => { Interlocked.Increment(ref calls); return CoinGeckoResponse(7); });
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var handler = new AsyncStubHandler(async (_, token) =>
+        {
+            Interlocked.Increment(ref calls);
+            started.TrySetResult();
+            await release.Task.WaitAsync(token);
+            return CoinGeckoResponse(7);
+        });
         using var client = new HttpClient(handler);
         using var cache = new MemoryCache(new MemoryCacheOptions());
         var history = CreateService(store, client, cache);
-        var results = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ =>
-            history.GetAsync("bitcoin", MarketDataSource.CoinGecko, 7, null, Token)));
+        var first = history.GetAsync("bitcoin", MarketDataSource.CoinGecko, 7, null, deadline.Token);
+        HistoricalMarketData[] results;
+        try
+        {
+            await started.Task.WaitAsync(deadline.Token);
+            var requests = Enumerable.Range(0, 4).Select(_ =>
+                history.GetAsync("bitcoin", MarketDataSource.CoinGecko, 7, null, deadline.Token)).Prepend(first).ToArray();
+            Assert.All(requests, request => Assert.False(request.IsCompleted));
+            Assert.Equal(1, Volatile.Read(ref calls));
+            release.TrySetResult();
+            results = await Task.WhenAll(requests).WaitAsync(deadline.Token);
+        }
+        finally
+        {
+            release.TrySetResult();
+            await deadline.CancelAsync();
+        }
         Assert.All(results, r => Assert.Equal(7, r.Observations.Count));
+        Assert.All(results, r => Assert.Equal(results[0].Observations, r.Observations));
+        Assert.Equal(results[0].Observations, await store.ReadAsync("bitcoin", MarketDataSource.CoinGecko,
+            results[0].From, results[0].To, Token));
         Assert.Equal(1, calls);
     }
 
@@ -317,6 +345,12 @@ public sealed class HistoricalMarketDataTests : IDisposable
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> send) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(send(request));
+    }
+
+    private sealed class AsyncStubHandler(Func<HttpRequestMessage, CancellationToken, Task<HttpResponseMessage>> send) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            send(request, cancellationToken);
     }
 
     public void Dispose()

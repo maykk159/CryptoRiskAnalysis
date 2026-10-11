@@ -62,14 +62,18 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.Equal((42_500_000m + 47_300_000m + 45_360_000m) / 3m, avgVolume);
         }
 
-        [Fact]
-        public async Task GetAllMarketDataAsync_EnsuresChronologicalOrder()
+        [Theory]
+        [InlineData(false)]
+        [InlineData(true)]
+        public async Task GetAllMarketDataAsync_EnsuresChronologicalOrder(bool reverseProviderOrder)
         {
             // Arrange
+            var klines = JsonSerializer.Deserialize<List<List<JsonElement>>>(GetMockBinanceResponse())!;
+            if (reverseProviderOrder) klines.Reverse();
             var mockResponse = new HttpResponseMessage
             {
                 StatusCode = HttpStatusCode.OK,
-                Content = new StringContent(GetMockBinanceResponse())
+                Content = new StringContent(JsonSerializer.Serialize(klines))
             };
 
             _mockHttpHandler.Protected()
@@ -88,7 +92,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
 
             // Act
-            var (priceHistory, _, _, _) = await service.GetAllMarketDataAsync(
+            var (priceHistory, currentPrice, currentVolume, averageVolume) = await service.GetAllMarketDataAsync(
                 "bitcoin", 3, TestContext.Current.CancellationToken);
 
             // Assert - Verify chronological order (oldest first)
@@ -97,6 +101,10 @@ namespace CryptoRiskAnalysis.Tests.Services
                 Assert.True(priceHistory[i].Timestamp > priceHistory[i - 1].Timestamp,
                     "Price history should be in chronological order (oldest to newest)");
             }
+            Assert.Equal(new[] { 42_500m, 43_000m, 43_200m }, priceHistory.Select(p => p.Price));
+            Assert.Equal(43_200m, currentPrice);
+            Assert.Equal(45_360_000m, currentVolume);
+            Assert.Equal((42_500_000m + 47_300_000m + 45_360_000m) / 3m, averageVolume);
         }
 
         [Fact]
@@ -253,6 +261,8 @@ namespace CryptoRiskAnalysis.Tests.Services
         [Fact]
         public async Task GetAllMarketDataAsync_ConcurrentCacheMissesShareOneProviderCall()
         {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(30));
             var providerCalls = 0;
             var providerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var releaseProvider = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -261,11 +271,11 @@ namespace CryptoRiskAnalysis.Tests.Services
                     "SendAsync",
                     ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>())
-                .Returns(async () =>
+                .Returns(async (HttpRequestMessage _, CancellationToken token) =>
                 {
                     Interlocked.Increment(ref providerCalls);
-                    providerStarted.SetResult();
-                    await releaseProvider.Task;
+                    providerStarted.TrySetResult();
+                    await releaseProvider.Task.WaitAsync(token);
                     return new HttpResponseMessage
                     {
                         StatusCode = HttpStatusCode.OK,
@@ -279,17 +289,28 @@ namespace CryptoRiskAnalysis.Tests.Services
             var secondService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock);
 
             var firstRequest = firstService.GetAllMarketDataAsync(
-                "bitcoin", 3, TestContext.Current.CancellationToken);
-            await providerStarted.Task;
-            var secondRequest = secondService.GetAllMarketDataAsync(
-                "bitcoin", 3, TestContext.Current.CancellationToken);
+                "bitcoin", 3, deadline.Token);
+            try
+            {
+                await providerStarted.Task.WaitAsync(deadline.Token);
+                var secondRequest = secondService.GetAllMarketDataAsync(
+                    "bitcoin", 3, deadline.Token);
 
-            Assert.Equal(1, Volatile.Read(ref providerCalls));
-            releaseProvider.SetResult();
-            await Task.WhenAll(firstRequest, secondRequest);
+                Assert.False(firstRequest.IsCompleted);
+                Assert.False(secondRequest.IsCompleted);
+                Assert.Equal(1, Volatile.Read(ref providerCalls));
+                releaseProvider.TrySetResult();
+                var results = await Task.WhenAll(firstRequest, secondRequest).WaitAsync(deadline.Token);
 
-            Assert.Equal(1, providerCalls);
-            Assert.Equal(firstRequest.Result.priceHistory.Count, secondRequest.Result.priceHistory.Count);
+                Assert.Equal(1, providerCalls);
+                Assert.Equal(results[0].priceHistory.Select(p => (p.Timestamp, p.Price)),
+                    results[1].priceHistory.Select(p => (p.Timestamp, p.Price)));
+            }
+            finally
+            {
+                releaseProvider.TrySetResult();
+                await deadline.CancelAsync();
+            }
         }
 
         [Fact]

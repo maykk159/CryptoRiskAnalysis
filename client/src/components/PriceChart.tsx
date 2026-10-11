@@ -1,17 +1,9 @@
 import { ChartNoAxesCombined } from 'lucide-react';
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-} from 'react';
+import { useId } from 'react';
 import type { PriceData } from '../types';
 import { formatUsdPrice } from '../utils/formatUsdPrice';
 import { formatUtcAxisDate, formatUtcTooltipDate } from '../utils/formatUtcDate';
-import { createChartModel } from '../utils/priceChartModel';
+import { usePriceChart } from '../hooks/usePriceChart';
 
 interface PriceChartProps {
   data: PriceData[];
@@ -19,71 +11,9 @@ interface PriceChartProps {
   currency?: string;
 }
 export function PriceChart({ data, timeRange, currency = 'USD' }: PriceChartProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
   const id = useId();
-  const [dimensions, setDimensions] = useState({ width: 1000, height: 310 });
-  const model = useMemo(
-    () => createChartModel(data, dimensions.width, dimensions.height),
-    [data, dimensions]
-  );
-
-  // Receipt of the same historical series must not restart interaction or animation.
-  const signature = useMemo(
-    () => JSON.stringify(model?.points.map(({ timestamp, price }) => [timestamp, price])),
-    [model]
-  );
-  const [inspection, setInspection] = useState<{
-    signature: string | undefined;
-    index: number;
-    keyboard: boolean;
-  } | null>(null);
-  const activeIndex = inspection?.signature === signature ? inspection?.index : undefined;
-  const activePoint = activeIndex === undefined ? null : model?.points[activeIndex];
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || typeof ResizeObserver === 'undefined') return;
-    const observer = new ResizeObserver(([entry]) => {
-      const width = Math.max(Math.round(entry.contentRect.width), 200);
-      const height = Math.max(Math.round(entry.contentRect.height), 200);
-      setDimensions(current =>
-        current.width === width && current.height === height ? current : { width, height }
-      );
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-  const inspect = (index: number, keyboard = false) =>
-    setInspection({ signature, index, keyboard });
-  const handlePointer = (event: PointerEvent<SVGSVGElement>) => {
-    if (!model) return;
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const x = ((event.clientX - bounds.left) / bounds.width) * model.bounds.width;
-    inspect(
-      model.points.reduce(
-        (nearest, point, index) =>
-          Math.abs(point.x - x) < Math.abs(model.points[nearest].x - x) ? index : nearest,
-        0
-      )
-    );
-  };
-  const handleKeyDown = (event: KeyboardEvent<SVGSVGElement>) => {
-    if (event.key === 'Escape') {
-      setInspection(null);
-      return;
-    }
-    if (!model || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
-    event.preventDefault();
-    inspect(
-      Math.min(
-        model.points.length - 1,
-        Math.max(
-          0,
-          (activeIndex ?? model.points.length - 1) + (event.key === 'ArrowRight' ? 1 : -1)
-        )
-      ),
-      true
-    );
-  };
+  const { containerRef, dimensions, model, activePoint, isKeyboardInspection, interactionProps } =
+    usePriceChart(data);
   return (
     <section className="chart-panel" aria-labelledby={`${id}-heading`}>
       <div className="mb-5 flex items-center gap-3">
@@ -113,14 +43,7 @@ export function PriceChart({ data, timeRange, currency = 'USD' }: PriceChartProp
               role="img"
               tabIndex={0}
               aria-label={`${timeRange}-day price chart. Use left and right arrow keys to inspect values.`}
-              onPointerDown={handlePointer}
-              onPointerMove={handlePointer}
-              onPointerLeave={event => {
-                if (event.pointerType !== 'touch' && !inspection?.keyboard) setInspection(null);
-              }}
-              onFocus={() => inspect(activeIndex ?? model.points.length - 1, true)}
-              onBlur={() => setInspection(null)}
-              onKeyDown={handleKeyDown}
+              {...interactionProps}
             >
               <defs>
                 <linearGradient id={`${id}-area`} x1="0" y1="0" x2="0" y2="1">
@@ -233,7 +156,7 @@ export function PriceChart({ data, timeRange, currency = 'USD' }: PriceChartProp
         <p>Touch or use ← → to inspect</p>
       </div>
       <span className="sr-only" aria-live="polite" aria-atomic="true">
-        {activePoint && inspection?.keyboard
+        {activePoint && isKeyboardInspection
           ? `${formatUtcTooltipDate(activePoint.timestamp)}: ${formatUsdPrice(activePoint.price)}`
           : ''}
       </span>
