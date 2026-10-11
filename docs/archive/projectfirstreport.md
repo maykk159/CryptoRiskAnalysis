@@ -1,3 +1,5 @@
+> **Archived semester report.** Preserved during documentation consolidation on October 11, 2026. This earlier report is not a current implementation reference: its Recharts and 180-second CoinGecko cache descriptions are outdated. See [current architecture](../architecture.md), [market-data behavior](../market-data.md), and [risk methodology](../risk-methodology.md).
+
 # Summary of the work carried out during the semester
 
 ## 1. System architecture and backend

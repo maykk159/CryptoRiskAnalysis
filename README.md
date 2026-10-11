@@ -1,355 +1,197 @@
-# Crypto Risk Analysis
+# CIPHER · Crypto Risk Analysis
 
-[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A)](https://react.dev/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+**An explainable cryptocurrency market-risk dashboard built with .NET and React.**
+
 [![CI](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml/badge.svg)](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml)
+[![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![SQLite](https://img.shields.io/badge/SQLite-Persistent_history-003B57?logo=sqlite&logoColor=white)](docs/market-data.md#persistent-daily-history)
 
-Crypto Risk Analysis (CIPHER) is a full-stack cryptocurrency market-risk dashboard built with ASP.NET Core, React, and TypeScript. It turns completed daily market observations from Binance and CoinGecko into historical risk metrics and an explainable, versioned 0–100 score.
+[Preview](#preview) · [Engineering](#engineering-decisions) · [Quick start](#quick-start) · [API](#api) · [Documentation](#documentation)
 
-The engineering focus is numerical correctness, explicit data contracts, and useful behavior when data is incomplete or providers fail. A local risk engine calculates annualized volatility, downside risk, maximum drawdown, a log-return Sharpe ratio, and historical daily Value at Risk. Public market-data endpoints require no API keys for local development.
+CIPHER turns completed daily observations from Binance and CoinGecko into historical risk metrics and a versioned 0–100 composite score. Users can explore 7-, 30-, and 90-day windows and inspect price history. The API exposes component contributions, input provenance, and warnings behind each analysis.
 
-> [!IMPORTANT]
-> This project is an analytical and educational tool. Its scores are model outputs based on historical market data, not investment advice or predictions of future performance.
-
-## Engineering highlights
-
-- **Explainable methodology:** Version 2.0.0 exposes observation dates/counts, fixed 40/30/30 component weights, weighted contributions, and limitations in the API response. Contributions reproduce the composite score after rounding.
-- **Correct edge-case semantics:** Sharpe is `null` when return variability is effectively zero, and the UI displays “Unavailable.” Historical VaR converts log returns to percentage losses: a fall from 100 to 50 is a 50% loss.
-- **Strict daily-data contract:** The engine rejects duplicate, missing, or unordered UTC dates, nonpositive prices, and unavailable volume baselines. Invalid provider input becomes an HTTP 502 response.
-- **Verification across layers:** xUnit tests cover mathematical examples, scale invariance, numerical extremes, and API serialization; Vitest tests cover null metrics, methodology warnings, loading, and recovery behavior. GitHub Actions defines backend and frontend quality checks.
-
-See the [English portfolio kit](docs/portfolio.md) for the technical case study, a three-minute demo script, ready-to-use CV bullets, and a prioritized improvement plan. The [methodology 2.0.0 change](https://github.com/maykk159/CryptoRiskAnalysis/commit/210d2f290da37635cfd057c985038b2ac6dbe56a) was committed on September 10, 2026; subsequent development is identified separately in the kit.
+The project connects a deterministic C# risk engine, resilient market-data integration, SQLite history, and a responsive TypeScript dashboard. Its engineering focus is numerical correctness, explicit API contracts, and recoverable failure states.
 
 ## Preview
 
-![CIPHER desktop dashboard showing the price chart, risk breakdown, and advanced metrics](.qa/cipher/bitcoin-1440.png)
+![CIPHER desktop dashboard with historical prices, component risk scores, and advanced metrics](.qa/cipher/bitcoin-1440.png)
 
-These archived screenshots were captured on **September 7, 2026**, before methodology 2.0.0. They illustrate the responsive interface; displayed prices, scores, metric explanations, and refresh timing belong to that earlier revision.
+_Archived interface capture — September 7, 2026, before methodology 2.0.0. Displayed values and refresh behavior belong to that revision._
 
 <details>
 <summary>Mobile layout and refresh recovery</summary>
 
-<img src=".qa/cipher/bitcoin-390.png" alt="Archived CIPHER mobile dashboard with stacked risk and price cards" width="300" />
+<img src=".qa/cipher/bitcoin-390.png" alt="Archived mobile dashboard with stacked analysis cards" width="300" />
 
-The mobile layout stacks the analysis cards and provides an expandable risk breakdown.
+The responsive layout stacks the cards and provides an expandable risk breakdown.
 
-![Archived dashboard retaining the last successful analysis after a simulated refresh failure](.qa/cipher/refresh-error-1366.png)
+![Archived dashboard preserving the last successful result after a simulated refresh failure](.qa/cipher/refresh-error-1366.png)
 
-The recovery capture uses a simulated HTTP 429 response and shows retained data with an explicit error and retry action.
+This earlier QA scenario simulates an HTTP 429 response. The dashboard retains the previous analysis and offers an explicit retry action.
 
 </details>
 
-The [original visual QA report](.qa/cipher/README.md) includes additional screenshots, scenario results, and validation limits.
+See the [visual QA gallery](.qa/cipher/README.md) for additional screenshots, scenario evidence, and capture limitations.
 
-## Features
+## Capabilities
 
-- **Hybrid market data:** Binance is used first for mapped assets; CoinGecko supports fallback and assets outside the Binance map.
-- **Consistent daily observations:** Both providers return completed daily data, avoiding partial intraday candles in historical calculations.
-- **Selectable analysis periods:** 7, 30, and 90 days.
-- **Risk dashboard:** Composite risk, volatility, trend, and volume scores on a 0–100 scale.
-- **Advanced metrics:** Annualized volatility, downside risk, maximum drawdown, annualized Sharpe ratio, and daily historical VaR at 95% confidence.
-- **Resilient provider access:** Exponential retries, timeouts, circuit breakers, cancellation propagation, and typed upstream errors.
-- **Efficient requests:** Cached daily history plus short-lived, on-demand quotes from the provider's price endpoint.
-- **Persistent history:** SQLite daily prices and quote volumes, source-separated upserts, and a database-first historical API with gap backfill.
-- **CoinGecko quota protection:** Shared outgoing request budget, retry accounting, and `Retry-After` cooldowns.
-- **API protection:** Per-IP fixed-window rate limiting with 30 requests per minute.
-- **Structured diagnostics:** Console and rolling file logs through Serilog.
+- **Interactive analysis:** 20 dashboard assets, three analysis windows, and a responsive SVG price chart with keyboard and touch inspection.
+- **Risk metrics:** Composite and component scores, annualized volatility, downside risk, maximum drawdown, annualized Sharpe, and historical daily VaR at 95%.
+- **Current quote provenance:** A separately fetched price with provider, currency, and fetch time; completed daily history remains the input to risk calculations.
+- **Persistent history:** Source-separated SQLite observations and a database-first historical API with recent gap backfill.
+- **Refresh and recovery:** Periodic updates while active, manual refresh, loading and offline states, and retained results after failed refreshes.
+
+The [asset catalog](client/src/constants/assets.ts) defines the dashboard choices. The API also accepts other CoinGecko asset IDs, subject to provider data availability.
+
+## Engineering decisions
+
+| Concern              | Implementation                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Explainable scoring  | Methodology 2.0.0 returns fixed 40/30/30 weights, unrounded component contributions, observation dates/counts, risk level, and warnings. Rounding the sum of contributions reproduces the composite.   |
+| Numerical edge cases | Undefined Sharpe is represented as `null` across C#, JSON, and TypeScript and displayed as “Unavailable.” Historical VaR converts log returns to percentage loss: a fall from 100 to 50 is a 50% loss. |
+| Input integrity      | Duplicate, missing, or unordered UTC dates, nonpositive prices, and unavailable volume baselines are rejected. Invalid upstream data produces HTTP 502.                                                |
+| Provider reliability | Binance-first routing with CoinGecko fallback for expected failures, concurrent cache-miss deduplication, cancellation, retries, timeouts, circuit breakers, and a shared CoinGecko request budget.    |
+| Maintainability      | Backend responsibilities are separated within one Web API project. Frontend hooks own query and interaction behavior; components render the cards and SVG chart.                                       |
+
+The [methodology specification](docs/risk-methodology.md) records formulas, thresholds, rounding, assumptions, and compatibility. The [portfolio case study](docs/portfolio.md) distinguishes the September 10 methodology revision from subsequent development.
+
+> [!NOTE]
+> The composite score is a project-specific historical indicator. Weights and thresholds are design choices, not empirically calibrated predictions. This is an analytical and educational project, not investment advice.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[React dashboard] -->|HTTP / JSON| API[RiskAnalysisController]
-    API --> DATA[HybridCryptoDataService]
-    API --> ENGINE[RiskAnalysisEngine]
-    DATA -->|primary for mapped assets| BINANCE[Binance Spot API]
-    DATA -->|fallback or unmapped asset| GECKO[CoinGecko API]
-    BINANCE --> CACHE[In-memory cache]
-    GECKO --> CACHE
-    ENGINE --> API
+    UI[React dashboard] --> API[ASP.NET Core API]
+    API --> ENGINE[Local risk engine]
+    API --> HISTORY[Hybrid daily-data service]
+    API --> QUOTES[Current quote service]
+    HISTORY --> PROVIDERS[Binance / CoinGecko adapters]
+    PROVIDERS --> STORE[SQLite daily archive]
+    PROVIDERS --> CACHE[Daily history cache]
+    QUOTES --> PRICE[Provider price endpoints]
 ```
 
-The API follows a layered structure:
+Daily observations and current quotes have independent caches. Risk calculations use completed UTC daily history; the displayed price comes from the same provider's price endpoint. Data collection is on demand.
 
-- **Controller:** validates the requested period, coordinates market data and returns a consistent response envelope.
-- **Hybrid data service:** selects Binance or CoinGecko and falls back only for expected provider failures.
-- **Provider services:** fetch, validate, normalize, and cache daily price and volume data.
-- **Risk engine:** performs all calculations locally after market data has been retrieved.
-- **Middleware:** maps provider and application exceptions to appropriate HTTP responses.
-
-The frontend keeps rendering separate from stateful behavior:
-
-- [Dashboard](client/src/components/Dashboard.tsx) composes the controls, cards, chart, and recovery states. [useRiskAnalysis](client/src/hooks/useRiskAnalysis.ts) owns polling and manual refresh; [useAnalysisUrlState](client/src/hooks/useAnalysisUrlState.ts) owns browser navigation.
-- [usePriceChart](client/src/hooks/usePriceChart.ts) owns chart sizing and pointer/keyboard inspection, using the pure [chart model](client/src/utils/priceChartModel.ts) for coordinates. [PriceChart](client/src/components/PriceChart.tsx) renders the SVG and tooltip.
-- [usePriceFlash](client/src/hooks/usePriceFlash.ts) owns price-change direction and timer cleanup. [RiskDial](client/src/components/dashboard/RiskDial.tsx) renders the gauge, while [RiskScoreCard](client/src/components/dashboard/RiskScoreCard.tsx) coordinates animation and the responsive breakdown.
-
-### Provider behavior
-
-| Capability | Binance | CoinGecko |
-|---|---|---|
-| Role | Primary for mapped assets | Fallback and long-tail assets |
-| Market data | Daily USDT klines | Daily USD market chart |
-| Daily history cache | 60 seconds | 60 seconds |
-| Current quote cache | 10 seconds; Refresh bypasses it | 30 seconds; Refresh bypasses it subject to quota |
-| Authentication | Not required | Not required |
-
-Transient failures are retried up to three times with exponential backoff and jitter, subject to the outgoing quota and shared cooldown. Attempts have a 10-second timeout and each provider operation has a 30-second total timeout. Circuit breaking uses a 50% failure ratio with at least five outcomes in 30 seconds. CoinGecko honors `Retry-After` and limits outgoing attempts to a configurable 20 per rolling minute per application instance. See [market data configuration, persistence, and API behavior](docs/market-data.md).
+See [architecture and application behavior](docs/architecture.md) for component responsibilities, request flow, historical reads, and deployment configuration.
 
 ## Technology stack
 
-| Area | Technologies |
-|---|---|
-| Backend | .NET 10, ASP.NET Core Web API, C# |
-| Resilience and logging | Polly, ASP.NET Core rate limiting, Serilog |
-| API documentation | Swagger / OpenAPI |
-| Frontend | React 19, TypeScript 5.9, Vite 7 |
-| UI and charts | Tailwind CSS, responsive SVG charts, Lucide React |
-| Server-state management | TanStack Query |
-| Tests | xUnit, Moq, Vitest |
+| Layer                       | Technologies                                                         |
+| --------------------------- | -------------------------------------------------------------------- |
+| Backend                     | C#, .NET 10, ASP.NET Core Web API                                    |
+| Data and integration        | SQLite, Binance Spot API, CoinGecko API                              |
+| Reliability and diagnostics | Microsoft.Extensions.Http.Resilience / Polly, rate limiting, Serilog |
+| Frontend                    | React 19, TypeScript 5.9, Vite 7, Tailwind CSS, Lucide React         |
+| State and visualization     | TanStack Query, browser `fetch`, custom SVG charts                   |
+| Verification                | xUnit, Moq, Vitest, Testing Library, GitHub Actions                  |
 
-## Getting started
+## Quick start
 
-### Prerequisites
+**Prerequisites:** stable .NET 10 SDK, a supported Node.js version, npm 10+, and Git. See [exact version requirements](REQUIREMENTS.md#prerequisites).
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0); `global.json` selects a stable 10.0 SDK, minimum 10.0.100.
-- [Node.js](https://nodejs.org/) 22.22.2+ within 22.x, 24.15.0+ within 24.x, or 26+; Node 24 is used in CI. These requirements include the test tools, not just Vite.
-- npm 10+ (bundled with supported Node.js installations).
-- [Git](https://git-scm.com/)
-
-### 1. Clone the repository
+### 1. Clone and prepare dependencies
 
 ```bash
 git clone https://github.com/maykk159/CryptoRiskAnalysis.git
 cd CryptoRiskAnalysis
 ```
 
-### 2. Set up the project
-
-On Windows, run:
+On Windows:
 
 ```powershell
 .\setup.cmd
 ```
 
-Setup checks tool versions, restores the entire .NET solution (including tests), and installs frontend dependencies from `package-lock.json` with `npm ci`. A repeated run skips the frontend install when its manifest, lockfile, configuration, tool versions, and installed dependency tree still match. NuGet uses its incremental restore and local cache.
+Setup checks prerequisites, restores backend packages, and installs locked frontend dependencies. Healthy unchanged frontend installs are reused. No provider API keys or separate database server are required.
 
-| Command | Behavior |
-|---|---|
-| `.\setup.cmd -Check` | Check files and prerequisites without restoring or installing packages |
-| `.\setup.cmd -Verify` | Set up dependencies, then run frontend formatting/lint/tests/build and backend Release build/tests |
-| `.\setup.cmd -Force` | Reinstall the frontend from the lockfile; useful after an interrupted or manually modified install |
-| `.\setup.cmd -Force -Verify` | Reinstall and run all verification checks |
+For macOS/Linux, use the [manual setup instructions](REQUIREMENTS.md#manual-setup). Setup options and troubleshooting are documented in [REQUIREMENTS.md](REQUIREMENTS.md).
 
-The wrapper forwards options and returns a nonzero exit code on failure. It works from another working directory and paths containing spaces. It does not require administrator rights, start servers, overwrite local configuration, or change the persistent PowerShell execution policy. If scripts are already allowed, `./setup.ps1` accepts the same options.
+### 2. Start the applications
 
-Close any running frontend dev/test processes before an install. On Windows, setup checks for locked native binaries before replacing `client/node_modules`, so a known file lock cannot leave the install half-deleted. Failed or interrupted installs are retried on the next run; the lockfile is never regenerated by setup. See [requirements and troubleshooting](REQUIREMENTS.md).
+Run each block in a separate terminal opened at the repository root.
 
-For manual setup (including macOS/Linux):
-
-```bash
-dotnet restore CryptoRiskAnalysis.API.sln
-cd client
-npm ci --include=dev --include=optional --no-audit --no-fund
-cd ..
-```
-
-### 3. Start the API
-
-From the repository root, move into the API project directory:
+**API**
 
 ```bash
 cd CryptoRiskAnalysis.API
 dotnet run
 ```
 
-Press `Ctrl+C` to stop the API. Because the terminal remains in the API directory, you can start it again with just `dotnet run`.
-
-The development API listens on `http://localhost:5058`. Swagger UI is available at [http://localhost:5058/swagger](http://localhost:5058/swagger).
-
-### 4. Start the client
-
-Open a second terminal:
+**Client**
 
 ```bash
 cd client
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173). The API CORS policy accepts the local Vite origins on ports `5173` and `5174`.
+| Application         | Local URL                                               |
+| ------------------- | ------------------------------------------------------- |
+| Dashboard           | [localhost:5173](http://localhost:5173)                 |
+| Development Swagger | [localhost:5058/swagger](http://localhost:5058/swagger) |
 
-If Windows PowerShell blocks `npm.ps1` through its execution policy, run `npm.cmd run dev`. This invokes the same npm CLI without requiring an execution-policy change.
+On Windows PowerShell, use `npm.cmd run dev` if execution policy blocks `npm.ps1`. Stop either application with `Ctrl+C`.
 
 ## Configuration
 
-The client uses `http://localhost:5058/api` by default. To point it to another API deployment, create `client/.env.local`:
+The client defaults to `http://localhost:5058/api`. To use another backend, create `client/.env.local`:
 
 ```dotenv
 VITE_API_URL=https://api.example.com/api
 ```
 
-Environment files are ignored by Git. Do not commit credentials or deployment secrets.
+Local environment files are ignored by Git. Backend settings cover CORS, trusted reverse proxies, HTTPS redirection, SQLite storage, and the CoinGecko request budget; see [deployment configuration](docs/architecture.md#reliability-and-configuration).
 
-## API reference
+## API
 
-### Get a risk analysis
-
-```http
-GET /api/RiskAnalysis/{assetId}?days={7|30|90}
-```
-
-`days` defaults to `30`. The `assetId` uses the CoinGecko identifier format, such as `bitcoin`, `ethereum`, or `polygon-ecosystem-token`.
-The displayed `currentPrice` comes from Binance's symbol price ticker or CoinGecko's simple-price endpoint, using the same provider as the historical series. `currentQuote` includes the provider, quote currency, server fetch time and, when supplied, source update time. Binance quotes are USDT; CoinGecko quotes are USD. Risk metrics and `priceHistory` continue to use completed UTC daily candles only.
-
-The dashboard requests an update every 10 seconds while active. Quotes are cached by provider/asset/currency for 10 seconds (Binance) or 30 seconds (CoinGecko), independent of the selected 7/30/90-day period. **Refresh** sends `?refresh=true` to bypass this quote cache; provider quotas still apply. A failed refresh leaves the last successful result visible with an error. There is no background collector when nobody is using the site. The frontend revalidates when revisiting a period rather than treating its old price as fresh for another minute.
-
-
-Example request:
+| Endpoint                                                       | Purpose                                                                                          |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /api/RiskAnalysis/{assetId}?days=30`                      | Risk metrics, current quote, daily history, and methodology metadata; supports 7, 30, or 90 days |
+| `GET /api/marketdata/{assetId}/history?days=30&source=Binance` | Persisted daily observations with recent gap backfill; supports 1–90 days                        |
 
 ```bash
 curl "http://localhost:5058/api/RiskAnalysis/bitcoin?days=30"
 ```
 
-Example response:
+Risk responses use a standard `{ succeeded, message, data, errors }` envelope. Add `refresh=true` to bypass the current-quote cache; historical caching and provider quotas still apply.
 
-```json
-{
-  "succeeded": true,
-  "message": null,
-  "data": {
-    "assetId": "bitcoin",
-    "compositeRiskScore": 31.42,
-    "currentPrice": 111234.56,
-    "volatilityScore": 38.17,
-    "trendScore": 24.86,
-    "volumeScore": 29.35,
-    "downsideRisk": 42.68,
-    "maxDrawdown": 12.71,
-    "sharpeRatio": 0.84,
-    "valueAtRisk95": 4.12,
-    "annualizedVolatility": 61.73,
-    "priceHistory": [
-      {
-        "timestamp": 1756684800000,
-        "price": 108245.37
-      }
-    ]
-  },
-  "errors": null
-}
-```
+See [API contracts and HTTP errors](docs/architecture.md#api-reference) and [historical API parameters](docs/market-data.md#historical-api).
 
-The numeric values above illustrate the response shape; live results depend on the selected asset, period, provider, and request time.
+## Testing and CI
 
-### HTTP responses
+[GitHub Actions](.github/workflows/ci.yml) runs three independent jobs on every push and pull request:
 
-| Status | Meaning |
-|---|---|
-| `200` | Analysis completed successfully |
-| `400` | Unsupported `days` value |
-| `404` | Asset or market data was not found |
-| `429` | Application or upstream provider rate limit was reached |
-| `502` | Market-data provider returned an invalid or unsuccessful response |
-| `503` | Provider circuit breaker is open |
-| `504` | Market-data request timed out |
-| `500` | Unexpected application error |
+| Job               | Checks                                                                           |
+| ----------------- | -------------------------------------------------------------------------------- |
+| Backend · Ubuntu  | Restore, formatting, Release build with warnings as errors, xUnit tests          |
+| Frontend · Ubuntu | Locked dependency installation, formatting, lint, Vitest tests, production build |
+| Setup · Windows   | Isolated regression checks using fake CLI tools                                  |
 
-Errors use the same response envelope with `succeeded: false`. Production responses hide internal exception details.
+Tests cover numerical examples and invariants, provider validation and fallback, cancellation and concurrent requests, SQLite persistence, API serialization, and dashboard interaction and recovery. See [coverage and limitations](docs/architecture.md#verification).
 
-## Risk methodology
-
-Daily log returns are calculated as:
-
-```text
-r(t) = ln(P(t) / P(t-1))
-```
-
-| Metric | Implementation |
-|---|---|
-| Annualized volatility | Sample standard deviation of daily log returns multiplied by `sqrt(365)` |
-| Downside risk | Root mean square of returns below a 0% daily target, annualized with `sqrt(365)` |
-| Maximum drawdown | Largest observed peak-to-trough percentage decline |
-| Sharpe ratio | Mean daily log return divided by sample standard deviation, using a 0% risk-free rate and annualized with `sqrt(365)` |
-| Historical VaR 95% | Daily loss at the 5th percentile; for fewer than 20 returns, the worst observed return is used |
-| Trend score | Absolute difference between the recent price average and the full selected-period average |
-| Volume score | Current-to-average volume ratio interpreted alongside the recent price change |
-
-Methodology **2.0.0** uses fixed volatility, trend, and volume weights of **40%, 30%, and 30%**. The API returns weighted contributions, input dates/counts, risk level, and data warnings. Invalid daily series and unavailable volume baselines are rejected. Sharpe is nullable when return variability is effectively zero. Historical VaR is converted from log return to actual percentage loss. See [the full methodology and compatibility notes](docs/risk-methodology.md) for formulas, thresholds, assumptions, and limitations.
-
-## Supported dashboard assets
-
-The current UI exposes 20 assets:
-
-Bitcoin, Ethereum, BNB, Solana, XRP, Dogecoin, Toncoin, Cardano, Shiba Inu, Avalanche, TRON, Polkadot, Bitcoin Cash, Chainlink, Polygon (POL), NEAR Protocol, Internet Computer, Litecoin, Uniswap, and Aptos.
-
-The API also accepts other valid CoinGecko asset IDs. Assets without a Binance mapping are requested directly from CoinGecko.
-
-## Testing and quality checks
-
-Run the backend test suite:
-
-```bash
-dotnet test --project CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj
-```
-
-Validate the frontend:
-
-```bash
-cd client
-npm run lint
-npm test
-npm run build
-```
-
-The backend suite covers controller behavior, cancellation propagation, the risk engine, Binance and CoinGecko validation, caching and concurrent-request deduplication, provider errors, hybrid fallback, retry/timeout/circuit behavior, exception middleware, and the rate-limit JSON response. Frontend tests cover low-price formatting and user-facing network errors.
-
-GitHub Actions runs the backend warning-as-error build and test suite plus the frontend install, lint, test, and production build on every push and pull request.
-
-Setup regression tests run on Windows using isolated fake tools, without downloading dependencies. Run them locally with:
+On Windows, prepare dependencies and run application checks with:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Setup.ps1
+.\setup.cmd -Verify
 ```
 
-## Project structure
+Backend formatting and setup regression tests have separate commands in [local verification instructions](REQUIREMENTS.md#verify).
 
-```text
-CryptoRiskAnalysis/
-├── CryptoRiskAnalysis.API/       ASP.NET Core API
-│   ├── Controllers/              HTTP endpoints
-│   ├── DTOs/                     API response models
-│   ├── Exceptions/               Typed market-data failures
-│   ├── Extensions/               DI, resilience, CORS, and rate-limit setup
-│   ├── Middleware/               Global exception handling
-│   ├── Models/                   Price and risk domain models
-│   └── Services/                 Providers, routing, and risk calculations
-├── CryptoRiskAnalysis.Tests/     xUnit backend tests
-├── .github/workflows/ci.yml      Backend and frontend CI
-├── client/                       React and TypeScript application
-│   └── src/
-│       ├── components/           Dashboard and chart components
-│       ├── constants/            Supported asset catalog
-│       ├── hooks/                Shared React hooks
-│       ├── services/             API client
-│       └── types/                TypeScript contracts
-├── CryptoRiskAnalysis.API.sln
-└── setup.ps1
-```
+## Documentation
 
-## Production considerations
+| Document                                     | Contents                                                                              |
+| -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [Requirements and setup](REQUIREMENTS.md)    | Supported tools, installation, run commands, verification, and troubleshooting        |
+| [Architecture](docs/architecture.md)         | Component responsibilities, request flow, API contracts, and deployment configuration |
+| [Risk methodology](docs/risk-methodology.md) | Formulas, weights, nullable metrics, warnings, and compatibility                      |
+| [Market data](docs/market-data.md)           | Providers, quotes, SQLite history, cache, quotas, and historical backfill             |
+| [Portfolio kit](docs/portfolio.md)           | Technical case study, demo script, CV bullets, and interview talking points           |
 
-Local development intentionally uses HTTP and permits the local Vite origins. Before deploying publicly:
-
-- configure a Kestrel HTTPS certificate or terminate TLS at a trusted reverse proxy (production HTTP requests are redirected to HTTPS port 443);
-- list every trusted reverse proxy IP or CIDR range in the `ReverseProxy` configuration so rate limiting uses the originating client IP;
-- replace the local CORS origins with the deployed frontend origin;
-- run with `ASPNETCORE_ENVIRONMENT=Production` so internal exception details are hidden;
-- review rate limits and caching for the expected traffic profile;
-- add authentication if the API should not be public;
-- monitor provider terms, availability, and rate-limit policies.
+Earlier semester and bug-review reports are retained in [the documentation archive](docs/archive/). Dated screenshots and QA results are in [the visual gallery](.qa/cipher/README.md).
 
 ## Author
 
-**Enes Camkaya** — [@maykk159](https://github.com/maykk159)
-
-Project repository: [github.com/maykk159/CryptoRiskAnalysis](https://github.com/maykk159/CryptoRiskAnalysis)
+**Enes Camkaya** · [GitHub @maykk159](https://github.com/maykk159)
