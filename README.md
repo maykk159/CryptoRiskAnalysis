@@ -5,12 +5,42 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![CI](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml/badge.svg)](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml)
 
-Crypto Risk Analysis is a full-stack dashboard for exploring the market risk of cryptocurrency assets. It combines completed daily candles from Binance and CoinGecko with a local risk engine that calculates volatility, momentum, volume, drawdown, Sharpe ratio, downside risk, and historical Value at Risk.
+Crypto Risk Analysis (CIPHER) is a full-stack cryptocurrency market-risk dashboard built with ASP.NET Core, React, and TypeScript. It turns completed daily market observations from Binance and CoinGecko into historical risk metrics and an explainable, versioned 0–100 score.
 
-The project is built as a .NET 10 Web API with a React 19 and TypeScript client. It uses public market-data endpoints and does not require API keys for local development.
+The engineering focus is numerical correctness, explicit data contracts, and useful behavior when data is incomplete or providers fail. A local risk engine calculates annualized volatility, downside risk, maximum drawdown, a log-return Sharpe ratio, and historical daily Value at Risk. Public market-data endpoints require no API keys for local development.
 
 > [!IMPORTANT]
 > This project is an analytical and educational tool. Its scores are model outputs based on historical market data, not investment advice or predictions of future performance.
+
+## Engineering highlights
+
+- **Explainable methodology:** Version 2.0.0 exposes observation dates/counts, fixed 40/30/30 component weights, weighted contributions, and limitations in the API response. Contributions reproduce the composite score after rounding.
+- **Correct edge-case semantics:** Sharpe is `null` when return variability is effectively zero, and the UI displays “Unavailable.” Historical VaR converts log returns to percentage losses: a fall from 100 to 50 is a 50% loss.
+- **Strict daily-data contract:** The engine rejects duplicate, missing, or unordered UTC dates, nonpositive prices, and unavailable volume baselines. Invalid provider input becomes an HTTP 502 response.
+- **Verification across layers:** xUnit tests cover mathematical examples, scale invariance, numerical extremes, and API serialization; Vitest tests cover null metrics, methodology warnings, loading, and recovery behavior. GitHub Actions defines backend and frontend quality checks.
+
+See the [English portfolio kit](docs/portfolio.md) for the technical case study, a three-minute demo script, ready-to-use CV bullets, and a prioritized improvement plan. The [methodology 2.0.0 change](https://github.com/maykk159/CryptoRiskAnalysis/commit/210d2f290da37635cfd057c985038b2ac6dbe56a) was committed on September 10, 2026; subsequent development is identified separately in the kit.
+
+## Preview
+
+![CIPHER desktop dashboard showing the price chart, risk breakdown, and advanced metrics](.qa/cipher/bitcoin-1440.png)
+
+These archived screenshots were captured on **September 7, 2026**, before methodology 2.0.0. They illustrate the responsive interface; displayed prices, scores, metric explanations, and refresh timing belong to that earlier revision.
+
+<details>
+<summary>Mobile layout and refresh recovery</summary>
+
+<img src=".qa/cipher/bitcoin-390.png" alt="Archived CIPHER mobile dashboard with stacked risk and price cards" width="300" />
+
+The mobile layout stacks the analysis cards and provides an expandable risk breakdown.
+
+![Archived dashboard retaining the last successful analysis after a simulated refresh failure](.qa/cipher/refresh-error-1366.png)
+
+The recovery capture uses a simulated HTTP 429 response and shows retained data with an explicit error and retry action.
+
+</details>
+
+The [original visual QA report](.qa/cipher/README.md) includes additional screenshots, scenario results, and validation limits.
 
 ## Features
 
