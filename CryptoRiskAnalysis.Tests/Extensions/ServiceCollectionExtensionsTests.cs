@@ -8,6 +8,7 @@ using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Options;
 using Polly.CircuitBreaker;
@@ -17,6 +18,72 @@ namespace CryptoRiskAnalysis.Tests.Extensions;
 
 public class ServiceCollectionExtensionsTests
 {
+    [Fact]
+    public void ApplicationServices_PreserveSharedInfrastructureAndScopedAnalysisServices()
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        var clock = new Moq.Mock<TimeProvider>().Object;
+        services.AddSingleton(clock);
+        services.AddApplicationServices();
+        using var provider = services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateScopes = true,
+            ValidateOnBuild = true
+        });
+        using var first = provider.CreateScope();
+        using var second = provider.CreateScope();
+
+        Assert.Same(clock, provider.GetRequiredService<TimeProvider>());
+        Assert.Same(first.ServiceProvider.GetRequiredService<MarketDataRequestLock>(),
+            second.ServiceProvider.GetRequiredService<MarketDataRequestLock>());
+        Assert.Same(first.ServiceProvider.GetRequiredService<CoinGeckoRequestBudget>(),
+            second.ServiceProvider.GetRequiredService<CoinGeckoRequestBudget>());
+
+        var firstEngine = first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.IRiskEngine>();
+        Assert.Same(firstEngine, first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.IRiskEngine>());
+        Assert.NotSame(firstEngine, second.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.IRiskEngine>());
+        var firstData = first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>();
+        Assert.Same(firstData, first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>());
+        Assert.NotSame(firstData, second.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICryptoDataService>());
+        var firstQuotes = first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>();
+        Assert.Same(firstQuotes, first.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>());
+        Assert.NotSame(firstQuotes, second.ServiceProvider.GetRequiredService<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>());
+    }
+
+    [Theory]
+    [InlineData(null, 443)]
+    [InlineData("8443", 8443)]
+    public void HttpsRedirection_UsesConfiguredPort(string? configuredPort, int expectedPort)
+    {
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(
+            new Dictionary<string, string?> { ["HttpsRedirection:HttpsPort"] = configuredPort }).Build();
+        var services = new ServiceCollection();
+        services.AddHttpsRedirectionConfiguration(configuration);
+        using var provider = services.BuildServiceProvider();
+        var options = provider.GetRequiredService<IOptions<Microsoft.AspNetCore.HttpsPolicy.HttpsRedirectionOptions>>().Value;
+        Assert.Equal(expectedPort, options.HttpsPort);
+        Assert.Equal(308, options.RedirectStatusCode);
+    }
+
+    [Fact]
+    public void Cors_UsesConfiguredProductionOrigins()
+    {
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Cors:AllowedOrigins:0"] = "https://risk.example.com"
+            }).Build();
+        var services = new ServiceCollection();
+        services.AddCorsConfiguration(configuration);
+        using var provider = services.BuildServiceProvider();
+        var policy = provider.GetRequiredService<IOptions<Microsoft.AspNetCore.Cors.Infrastructure.CorsOptions>>()
+            .Value.GetPolicy("AllowReactApp")!;
+        Assert.True(policy.IsOriginAllowed("https://risk.example.com"));
+        Assert.False(policy.IsOriginAllowed("http://localhost:5173"));
+        Assert.False(policy.IsOriginAllowed("https://untrusted.example.com"));
+    }
+
     [Fact]
     public async Task RateLimitRejection_UsesApiResponseEnvelope()
     {

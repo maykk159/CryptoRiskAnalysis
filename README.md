@@ -5,12 +5,42 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![CI](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml/badge.svg)](https://github.com/maykk159/CryptoRiskAnalysis/actions/workflows/ci.yml)
 
-Crypto Risk Analysis is a full-stack dashboard for exploring the market risk of cryptocurrency assets. It combines completed daily candles from Binance and CoinGecko with a local risk engine that calculates volatility, momentum, volume, drawdown, Sharpe ratio, downside risk, and historical Value at Risk.
+Crypto Risk Analysis (CIPHER) is a full-stack cryptocurrency market-risk dashboard built with ASP.NET Core, React, and TypeScript. It turns completed daily market observations from Binance and CoinGecko into historical risk metrics and an explainable, versioned 0–100 score.
 
-The project is built as a .NET 10 Web API with a React 19 and TypeScript client. It uses public market-data endpoints and does not require API keys for local development.
+The engineering focus is numerical correctness, explicit data contracts, and useful behavior when data is incomplete or providers fail. A local risk engine calculates annualized volatility, downside risk, maximum drawdown, a log-return Sharpe ratio, and historical daily Value at Risk. Public market-data endpoints require no API keys for local development.
 
 > [!IMPORTANT]
 > This project is an analytical and educational tool. Its scores are model outputs based on historical market data, not investment advice or predictions of future performance.
+
+## Engineering highlights
+
+- **Explainable methodology:** Version 2.0.0 exposes observation dates/counts, fixed 40/30/30 component weights, weighted contributions, and limitations in the API response. Contributions reproduce the composite score after rounding.
+- **Correct edge-case semantics:** Sharpe is `null` when return variability is effectively zero, and the UI displays “Unavailable.” Historical VaR converts log returns to percentage losses: a fall from 100 to 50 is a 50% loss.
+- **Strict daily-data contract:** The engine rejects duplicate, missing, or unordered UTC dates, nonpositive prices, and unavailable volume baselines. Invalid provider input becomes an HTTP 502 response.
+- **Verification across layers:** xUnit tests cover mathematical examples, scale invariance, numerical extremes, and API serialization; Vitest tests cover null metrics, methodology warnings, loading, and recovery behavior. GitHub Actions defines backend and frontend quality checks.
+
+See the [English portfolio kit](docs/portfolio.md) for the technical case study, a three-minute demo script, ready-to-use CV bullets, and a prioritized improvement plan. The [methodology 2.0.0 change](https://github.com/maykk159/CryptoRiskAnalysis/commit/210d2f290da37635cfd057c985038b2ac6dbe56a) was committed on September 10, 2026; subsequent development is identified separately in the kit.
+
+## Preview
+
+![CIPHER desktop dashboard showing the price chart, risk breakdown, and advanced metrics](.qa/cipher/bitcoin-1440.png)
+
+These archived screenshots were captured on **September 7, 2026**, before methodology 2.0.0. They illustrate the responsive interface; displayed prices, scores, metric explanations, and refresh timing belong to that earlier revision.
+
+<details>
+<summary>Mobile layout and refresh recovery</summary>
+
+<img src=".qa/cipher/bitcoin-390.png" alt="Archived CIPHER mobile dashboard with stacked risk and price cards" width="300" />
+
+The mobile layout stacks the analysis cards and provides an expandable risk breakdown.
+
+![Archived dashboard retaining the last successful analysis after a simulated refresh failure](.qa/cipher/refresh-error-1366.png)
+
+The recovery capture uses a simulated HTTP 429 response and shows retained data with an explicit error and retry action.
+
+</details>
+
+The [original visual QA report](.qa/cipher/README.md) includes additional screenshots, scenario results, and validation limits.
 
 ## Features
 
@@ -20,7 +50,9 @@ The project is built as a .NET 10 Web API with a React 19 and TypeScript client.
 - **Risk dashboard:** Composite risk, volatility, trend, and volume scores on a 0–100 scale.
 - **Advanced metrics:** Annualized volatility, downside risk, maximum drawdown, annualized Sharpe ratio, and daily historical VaR at 95% confidence.
 - **Resilient provider access:** Exponential retries, timeouts, circuit breakers, cancellation propagation, and typed upstream errors.
-- **Efficient requests:** In-memory provider caches and a single combined market-data request per analysis.
+- **Efficient requests:** Cached daily history plus short-lived, on-demand quotes from the provider's price endpoint.
+- **Persistent history:** SQLite daily prices and quote volumes, source-separated upserts, and a database-first historical API with gap backfill.
+- **CoinGecko quota protection:** Shared outgoing request budget, retry accounting, and `Retry-After` cooldowns.
 - **API protection:** Per-IP fixed-window rate limiting with 30 requests per minute.
 - **Structured diagnostics:** Console and rolling file logs through Serilog.
 
@@ -46,16 +78,23 @@ The API follows a layered structure:
 - **Risk engine:** performs all calculations locally after market data has been retrieved.
 - **Middleware:** maps provider and application exceptions to appropriate HTTP responses.
 
+The frontend keeps rendering separate from stateful behavior:
+
+- [Dashboard](client/src/components/Dashboard.tsx) composes the controls, cards, chart, and recovery states. [useRiskAnalysis](client/src/hooks/useRiskAnalysis.ts) owns polling and manual refresh; [useAnalysisUrlState](client/src/hooks/useAnalysisUrlState.ts) owns browser navigation.
+- [usePriceChart](client/src/hooks/usePriceChart.ts) owns chart sizing and pointer/keyboard inspection, using the pure [chart model](client/src/utils/priceChartModel.ts) for coordinates. [PriceChart](client/src/components/PriceChart.tsx) renders the SVG and tooltip.
+- [usePriceFlash](client/src/hooks/usePriceFlash.ts) owns price-change direction and timer cleanup. [RiskDial](client/src/components/dashboard/RiskDial.tsx) renders the gauge, while [RiskScoreCard](client/src/components/dashboard/RiskScoreCard.tsx) coordinates animation and the responsive breakdown.
+
 ### Provider behavior
 
 | Capability | Binance | CoinGecko |
 |---|---|---|
 | Role | Primary for mapped assets | Fallback and long-tail assets |
 | Market data | Daily USDT klines | Daily USD market chart |
-| Cache duration | 60 seconds | 60 seconds |
+| Daily history cache | 60 seconds | 60 seconds |
+| Current quote cache | 10 seconds; Refresh bypasses it | 30 seconds; Refresh bypasses it subject to quota |
 | Authentication | Not required | Not required |
 
-Transient network errors, upstream `5xx` responses, and `429` responses are retried up to three times with exponential delays. A provider circuit opens for 30 seconds after five handled failures, and each provider request has a 10-second policy timeout.
+Transient failures are retried up to three times with exponential backoff and jitter, subject to the outgoing quota and shared cooldown. Attempts have a 10-second timeout and each provider operation has a 30-second total timeout. Circuit breaking uses a 50% failure ratio with at least five outcomes in 30 seconds. CoinGecko honors `Retry-After` and limits outgoing attempts to a configurable 20 per rolling minute per application instance. See [market data configuration, persistence, and API behavior](docs/market-data.md).
 
 ## Technology stack
 
@@ -160,7 +199,9 @@ GET /api/RiskAnalysis/{assetId}?days={7|30|90}
 ```
 
 `days` defaults to `30`. The `assetId` uses the CoinGecko identifier format, such as `bitcoin`, `ethereum`, or `polygon-ecosystem-token`.
-The displayed `currentPrice` comes from the latest provider observation and refreshes every 60 seconds while the dashboard is open. Risk metrics and `priceHistory` continue to use completed UTC daily candles only.
+The displayed `currentPrice` comes from Binance's symbol price ticker or CoinGecko's simple-price endpoint, using the same provider as the historical series. `currentQuote` includes the provider, quote currency, server fetch time and, when supplied, source update time. Binance quotes are USDT; CoinGecko quotes are USD. Risk metrics and `priceHistory` continue to use completed UTC daily candles only.
+
+The dashboard requests an update every 10 seconds while active. Quotes are cached by provider/asset/currency for 10 seconds (Binance) or 30 seconds (CoinGecko), independent of the selected 7/30/90-day period. **Refresh** sends `?refresh=true` to bypass this quote cache; provider quotas still apply. A failed refresh leaves the last successful result visible with an error. There is no background collector when nobody is using the site. The frontend revalidates when revisiting a period rather than treating its old price as fresh for another minute.
 
 
 Example request:

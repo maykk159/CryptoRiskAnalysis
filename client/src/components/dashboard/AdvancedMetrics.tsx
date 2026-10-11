@@ -7,7 +7,7 @@ import {
   TrendingDown,
   type LucideIcon,
 } from 'lucide-react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import type { RiskAnalysisResponse } from '../../types';
 import { formatMetric } from '../../utils/riskPresentation';
 
@@ -72,6 +72,7 @@ const METRICS: {
 ];
 
 export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, MetricKey> }) {
+  const headingId = useId();
   const sectionRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -103,9 +104,9 @@ export function AdvancedMetrics({ data }: { data: Pick<RiskAnalysisResponse, Met
   }, []);
 
   return (
-    <section ref={sectionRef} aria-labelledby="metrics-heading" className="mt-6">
+    <section ref={sectionRef} aria-labelledby={headingId} className="mt-6">
       <div className="mb-3 flex flex-wrap items-baseline justify-between gap-1">
-        <h2 id="metrics-heading" className="section-title">
+        <h2 id={headingId} className="section-title">
           Advanced Metrics
         </h2>
         <p className="text-xs text-muted">Based on the selected historical period</p>

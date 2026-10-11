@@ -7,7 +7,7 @@ namespace CryptoRiskAnalysis.API.Interfaces
         // Volume values are daily quote-currency turnover (USD/USDT). Risk calculations
         // compare current turnover with the same provider's historical average, avoiding
         // comparisons of absolute venue volume with market-wide volume.
-        Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        Task<MarketDataSnapshot> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default);

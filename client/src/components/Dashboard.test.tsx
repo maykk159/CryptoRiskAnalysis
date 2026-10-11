@@ -143,7 +143,7 @@ describe('Dashboard loading and recovery', () => {
 
     await waitFor(() => expect(getAnalysis).toHaveBeenCalledTimes(2));
     expect(screen.getByRole('status').textContent).toContain('Loading 30-day');
-    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 30, expect.any(AbortSignal));
+    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 30, expect.any(AbortSignal), true);
 
     await act(async () => retry.resolve(analysis));
 
@@ -201,7 +201,7 @@ describe('Dashboard loading and recovery', () => {
     await user.dblClick(retrying);
     expect(getAnalysis).toHaveBeenCalledTimes(3);
     expect(screen.getByText('12.34%')).toBeTruthy();
-    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 30, expect.any(AbortSignal));
+    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 30, expect.any(AbortSignal), true);
     await act(async () => retry.resolve({ ...analysis, downsideRisk: 42.75 }));
 
     expect(await screen.findByText('42.75%')).toBeTruthy();
@@ -265,6 +265,23 @@ describe('Dashboard loading and recovery', () => {
 });
 
 describe('Dashboard data integrity', () => {
+  it('requests an updated backend result when returning to an already cached period', async () => {
+    const user = userEvent.setup();
+    getAnalysis
+      .mockResolvedValueOnce({ ...analysis, currentPrice: 100 })
+      .mockResolvedValueOnce({ ...analysis, currentPrice: 200 })
+      .mockResolvedValueOnce({ ...analysis, currentPrice: 201 });
+    renderDashboard();
+    const summary = await screen.findByRole('region', { name: 'Selected asset and current price' });
+    await waitFor(() => expect(summary.textContent).toContain('$100.00'));
+    await user.click(screen.getByRole('button', { name: '90 Days' }));
+    await waitFor(() => expect(summary.textContent).toContain('$200.00'));
+    await user.click(screen.getByRole('button', { name: '30 Days' }));
+    await waitFor(() => expect(summary.textContent).toContain('$201.00'));
+    expect(getAnalysis).toHaveBeenCalledTimes(3);
+    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 30, expect.any(AbortSignal));
+  });
+
   it('uses currentPrice only, preserving tiny prices and showing unavailable for missing values', async () => {
     getAnalysis.mockResolvedValueOnce({ ...analysis, currentPrice: 0.00001234 });
     const { client } = renderDashboard();

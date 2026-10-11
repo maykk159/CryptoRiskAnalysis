@@ -11,6 +11,24 @@ namespace CryptoRiskAnalysis.Tests.Services
     public class HybridCryptoDataServiceTests
     {
         [Fact]
+        public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceThrowsStandardTimeout()
+        {
+            var calls = 0;
+            using var binanceClient = new HttpClient(new StubHttpMessageHandler((_, _) => throw new TimeoutException()));
+            using var coinGeckoClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
+            {
+                calls++;
+                return Task.FromResult(JsonResponse(CreateCoinGeckoPayload()));
+            }));
+            using var binanceCache = new MemoryCache(new MemoryCacheOptions());
+            using var coinGeckoCache = new MemoryCache(new MemoryCacheOptions());
+            var result = await CreateService(binanceClient, coinGeckoClient, binanceCache, coinGeckoCache)
+                .GetAllMarketDataAsync("bitcoin", 1, TestContext.Current.CancellationToken);
+            Assert.Single(result.priceHistory);
+            Assert.Equal(1, calls);
+        }
+
+        [Fact]
         public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceReturnsInvalidJson()
         {
             var coinGeckoCalls = 0;
@@ -31,6 +49,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.Equal(1, coinGeckoCalls);
             Assert.Single(result.priceHistory);
             Assert.Equal(100m, result.priceHistory[0].Price);
+            Assert.Equal(CryptoRiskAnalysis.API.Models.MarketDataSource.CoinGecko, result.Source);
         }
 
         [Fact]

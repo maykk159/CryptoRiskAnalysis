@@ -4,11 +4,21 @@ ASP.NET Core Web API for retrieving validated daily cryptocurrency market data a
 
 The backend targets **.NET 10** and is organized into folders inside a single Web API project. Controllers, services, models, middleware, and provider adapters are separated by responsibility, but they are not separate Domain/Application/Infrastructure assemblies; this repository therefore does not claim strict Clean Architecture.
 
+## Backend organization
+
+| Responsibility | Implementation |
+|---|---|
+| Risk calculations | [RiskAnalysisEngine](Services/RiskAnalysisEngine.cs) coordinates private helpers for returns, volatility, trend, drawdown, historical VaR, Sharpe, and warnings. |
+| Shared methodology | [RiskMethodology](Models/RiskMethodology.cs) defines the version, component weights, and composite classification thresholds; the engine and response metadata use the same weights. |
+| Provider adapters | Binance and CoinGecko separate HTTP access, response validation, parsing, and persistence/cache publication. Completed observations are validated before persistence, and persistence must succeed before a new result is cached. |
+| Service registration | [Application services](Extensions/ServiceCollectionExtensions.cs) coordinate partial files for [market data and resilience](Extensions/ServiceCollectionExtensions.MarketData.cs), [rate limiting](Extensions/ServiceCollectionExtensions.RateLimiting.cs), and [HTTP/hosting configuration](Extensions/ServiceCollectionExtensions.Http.cs). Existing public registration methods remain the entry points. |
+
 ## Dependencies
 
 The API uses these external NuGet packages:
 
 - `Microsoft.Extensions.Http.Resilience` for retry, timeout, and circuit-breaker handlers.
+- `Microsoft.Data.Sqlite` for daily historical market-data persistence.
 - `Serilog.AspNetCore` for console and rolling-file logging.
 - `Swashbuckle.AspNetCore` for development OpenAPI/Swagger UI.
 
@@ -108,6 +118,6 @@ dotnet build CryptoRiskAnalysis.API.sln --configuration Release --no-restore -wa
 dotnet test CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj --configuration Release --no-build
 ```
 
-The suite covers controller behavior, cancellation propagation, risk calculations, provider validation and fallback, cache-miss deduplication, the retry/timeout/circuit pipeline, exception middleware, and the JSON rate-limit response.
+The suite covers controller behavior, cancellation propagation, risk calculations, provider validation and fallback, cache-miss deduplication, HTTP response disposal, persistence failures before cache publication, shared/scoped service lifetimes, the retry/timeout/circuit pipeline, exception middleware, and the JSON rate-limit response.
 
 See the [repository README](../README.md) for complete setup and frontend instructions.

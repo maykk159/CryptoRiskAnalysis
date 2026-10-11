@@ -12,6 +12,7 @@ namespace CryptoRiskAnalysis.API.DTOs
         public decimal TrendScore { get; set; }
         public decimal VolumeScore { get; set; }
         public decimal CurrentPrice { get; set; }
+        public MarketQuote? CurrentQuote { get; set; }
         public RiskAnalysisResponseDto() { }
 
         public RiskAnalysisResponseDto(string assetId, decimal currentPrice, RiskScoreResult riskResult)

@@ -2,6 +2,11 @@ using System.Net;
 
 namespace CryptoRiskAnalysis.API.Exceptions
 {
+    public sealed class InvalidHistoricalDateRangeException()
+        : Exception("The window must contain valid completed UTC dates.");
+
+    public sealed class HistoricalDataUnavailableException(string message) : Exception(message);
+
     public sealed class AssetNotFoundException : Exception
     {
         public AssetNotFoundException(string assetId)
@@ -12,9 +17,12 @@ namespace CryptoRiskAnalysis.API.Exceptions
 
     public sealed class UpstreamRateLimitException : Exception
     {
-        public UpstreamRateLimitException(string provider)
+        public TimeSpan? RetryAfter { get; }
+
+        public UpstreamRateLimitException(string provider, TimeSpan? retryAfter = null)
             : base($"{provider} rate limit exceeded. Please try again later.")
         {
+            RetryAfter = retryAfter;
         }
     }
 

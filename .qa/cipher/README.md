@@ -28,6 +28,8 @@ Tests cover combobox filtering and keyboard editing, no results, currentPrice ve
 
 ## Browser evidence
 
+The screenshots and three linked result summaries are intentionally versioned as archived portfolio evidence. Machine-specific browser scripts, captured provider fixtures, live-validation output, logs, and build artifacts remain local and are ignored by Git.
+
 Installed Edge was driven through the already installed Playwright runtime. No browser/test dependency was added to client/package.json. The preferred CUA runtime failed to start due to a Windows sandbox helper error; CLI execution with reviewed escalation enabled the alternative browser workflow.
 
 Successful Bitcoin, SHIB and Internet Computer views used the running local API. Error/loading/empty/offline scenarios used browser-only network interception and a captured API response; fixtures are confined to this QA directory.

@@ -1,8 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
 import { TrendingDown, TrendingUp } from 'lucide-react';
-import type { Asset, PriceData } from '../../types';
+import type { Asset, PriceData, RiskAnalysisResponse } from '../../types';
 import { formatUsdPrice } from '../../utils/formatUsdPrice';
+import { formatUtcTime } from '../../utils/formatUtcDate';
 import { CryptoAssetIcon } from '../CryptoAssetIcon';
+import { usePriceFlash } from '../../hooks/usePriceFlash';
+
+interface AssetSummaryProps {
+  asset: Asset;
+  price?: number;
+  priceHistory?: PriceData[];
+  loading: boolean;
+  updatedAt?: number;
+  quote?: RiskAnalysisResponse['currentQuote'];
+}
 
 export function AssetSummary({
   asset,
@@ -10,18 +20,8 @@ export function AssetSummary({
   priceHistory,
   loading,
   updatedAt,
-}: {
-  asset: Asset;
-  price?: number;
-  priceHistory?: PriceData[];
-  loading: boolean;
-  updatedAt?: number;
-}) {
-  const [flash, setFlash] = useState<'up' | 'down' | null>(null);
-  const prevPriceRef = useRef<number | undefined>(price);
-  const prevAssetIdRef = useRef<string>(asset.id);
-  const prevUpdatedAtRef = useRef<number | undefined>(updatedAt);
-
+  quote,
+}: AssetSummaryProps) {
   // Calculate period price change
   const startPrice = priceHistory && priceHistory.length > 0 ? priceHistory[0].price : undefined;
   const priceChange =
@@ -31,73 +31,14 @@ export function AssetSummary({
       ? (priceChange / startPrice) * 100
       : undefined;
   const isPositive = priceChangePercent !== undefined ? priceChangePercent >= 0 : null;
-
-  useEffect(() => {
-    // If the asset changed, reset refs without flashing
-    if (prevAssetIdRef.current !== asset.id) {
-      prevAssetIdRef.current = asset.id;
-      prevPriceRef.current = price;
-      prevUpdatedAtRef.current = updatedAt;
-      setFlash(null);
-      return;
-    }
-
-    // Condition 1: Actual price change detected
-    if (
-      price !== undefined &&
-      prevPriceRef.current !== undefined &&
-      price !== prevPriceRef.current
-    ) {
-      const direction = price > prevPriceRef.current ? 'up' : 'down';
-      setFlash(direction);
-      prevPriceRef.current = price;
-      prevUpdatedAtRef.current = updatedAt;
-
-      const timer = setTimeout(() => {
-        setFlash(null);
-      }, 1400);
-
-      return () => clearTimeout(timer);
-    }
-
-    // Condition 2: Data refresh occurred (updatedAt changed) for the current asset
-    if (
-      updatedAt !== undefined &&
-      prevUpdatedAtRef.current !== undefined &&
-      updatedAt !== prevUpdatedAtRef.current &&
-      price !== undefined
-    ) {
-      const direction =
-        prevPriceRef.current !== undefined && price !== prevPriceRef.current
-          ? price > prevPriceRef.current
-            ? 'up'
-            : 'down'
-          : isPositive !== null
-            ? isPositive
-              ? 'up'
-              : 'down'
-            : 'up';
-
-      setFlash(direction);
-      prevPriceRef.current = price;
-      prevUpdatedAtRef.current = updatedAt;
-
-      const timer = setTimeout(() => {
-        setFlash(null);
-      }, 1400);
-
-      return () => clearTimeout(timer);
-    }
-
-    if (price !== undefined && prevPriceRef.current === undefined) {
-      prevPriceRef.current = price;
-    }
-    if (updatedAt !== undefined && prevUpdatedAtRef.current === undefined) {
-      prevUpdatedAtRef.current = updatedAt;
-    }
-  }, [asset.id, price, updatedAt, isPositive]);
-
+  const flash = usePriceFlash({
+    assetId: asset.id,
+    price,
+    updatedAt,
+    periodIsPositive: isPositive,
+  });
   const flashClass = flash === 'up' ? 'price-flash-up' : flash === 'down' ? 'price-flash-down' : '';
+  const formattedPrice = formatUsdPrice(price);
 
   return (
     <section
@@ -110,7 +51,7 @@ export function AssetSummary({
         </span>
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wider text-accent">
-            {asset.ticker} / USD
+            {asset.ticker} / {quote?.currency ?? 'USD'}
           </p>
           <h2 className="break-words text-2xl font-semibold tracking-tight sm:text-[28px]">
             {asset.name}
@@ -124,9 +65,18 @@ export function AssetSummary({
             aria-hidden="true"
           />
           <p className="text-xs text-secondary">
-            Current price <span className="text-muted">· USD</span>
+            Current price <span className="text-muted">· {quote?.currency ?? 'USD'}</span>
           </p>
         </div>
+        {quote && (
+          <p className="mb-1 text-xs text-muted">
+            {quote.source} · Fetched at{' '}
+            <time dateTime={quote.fetchedAt}>{formatUtcTime(quote.fetchedAt)}</time>
+            {quote.sourceUpdatedAt && (
+              <> · Source updated at {formatUtcTime(quote.sourceUpdatedAt)}</>
+            )}
+          </p>
+        )}
         {loading ? (
           <div
             aria-label="Loading current price"
@@ -137,12 +87,12 @@ export function AssetSummary({
             <p
               data-flash={flash ?? undefined}
               className={`break-words font-semibold tracking-tight tabular-nums transition-colors duration-200 ${
-                formatUsdPrice(price) === 'Unavailable'
+                formattedPrice === 'Unavailable'
                   ? 'text-xl text-muted'
                   : 'text-[32px] leading-tight sm:text-[40px]'
               } ${flashClass}`}
             >
-              {formatUsdPrice(price)}
+              {formattedPrice}
             </p>
             {priceChangePercent !== undefined && (
               <div className="mt-1 flex flex-wrap items-center gap-2 sm:justify-end">

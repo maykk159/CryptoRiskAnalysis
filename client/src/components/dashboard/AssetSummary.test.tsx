@@ -20,6 +20,61 @@ const ethAsset: Asset = {
 };
 
 describe('AssetSummary component', () => {
+  it('shows quote currency, provider and actual server fetch timestamp', () => {
+    render(
+      <AssetSummary
+        asset={btcAsset}
+        price={100}
+        loading={false}
+        quote={{
+          price: 100,
+          source: 'Binance',
+          currency: 'USDT',
+          fetchedAt: '2026-09-11T08:00:00Z',
+          sourceUpdatedAt: null,
+        }}
+      />
+    );
+    expect(screen.getByText('BTC / USDT')).toBeTruthy();
+    expect(screen.getByText(/Binance · Fetched at/)).toBeTruthy();
+    expect(document.querySelector('time')?.dateTime).toBe('2026-09-11T08:00:00Z');
+  });
+
+  it('clears an active flash after the history changes direction', () => {
+    vi.useFakeTimers();
+    const history = [{ timestamp: 0, price: 90 }];
+    const { rerender } = render(
+      <AssetSummary
+        asset={btcAsset}
+        price={100}
+        priceHistory={history}
+        loading={false}
+        updatedAt={1}
+      />
+    );
+    rerender(
+      <AssetSummary
+        asset={btcAsset}
+        price={110}
+        priceHistory={history}
+        loading={false}
+        updatedAt={2}
+      />
+    );
+    expect(screen.getByText('$110.00').getAttribute('data-flash')).toBe('up');
+    rerender(
+      <AssetSummary
+        asset={btcAsset}
+        price={110}
+        priceHistory={[{ timestamp: 0, price: 120 }]}
+        loading={false}
+        updatedAt={2}
+      />
+    );
+    act(() => vi.advanceTimersByTime(1400));
+    expect(screen.getByText('$110.00').getAttribute('data-flash')).toBeNull();
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });

@@ -1,5 +1,7 @@
 using CryptoRiskAnalysis.API.Extensions;
 using CryptoRiskAnalysis.API.Middleware;
+using CryptoRiskAnalysis.API.Interfaces;
+using CryptoRiskAnalysis.API.Services;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -15,10 +17,15 @@ builder.Services.AddControllers();
 
 // Configure Services using Extension Method
 builder.Services.AddApplicationServices();
+builder.Services.Configure<CoinGeckoOptions>(builder.Configuration.GetSection("CoinGecko"));
+builder.Services.AddSingleton<IHistoricalMarketDataStore>(_ =>
+    new SqliteHistoricalMarketDataStore(Path.GetFullPath(
+        builder.Configuration["HistoricalData:DatabasePath"] ?? "Data/market-history.db", builder.Environment.ContentRootPath)));
+builder.Services.AddScoped<HistoricalMarketDataService>();
 builder.Services.AddForwardedHeadersConfiguration(builder.Configuration);
 
 // Configure CORS
-builder.Services.AddCorsConfiguration();
+builder.Services.AddCorsConfiguration(builder.Configuration);
 
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
@@ -26,11 +33,7 @@ builder.Services.AddSwaggerGen();
 
 // Direct production deployments must never serve API responses over plain HTTP.
 // The HTTPS endpoint/certificate can still be supplied by Kestrel configuration.
-builder.Services.AddHttpsRedirection(options =>
-{
-    options.HttpsPort = 443;
-    options.RedirectStatusCode = StatusCodes.Status308PermanentRedirect;
-});
+builder.Services.AddHttpsRedirectionConfiguration(builder.Configuration);
 
 var app = builder.Build();
 

@@ -20,6 +20,14 @@ namespace CryptoRiskAnalysis.Tests.Integration;
 
 public class ApiPipelineTests
 {
+    private static CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService CreateQuotes()
+    {
+        var quotes = new Mock<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>();
+        quotes.Setup(q => q.GetAsync(It.IsAny<string>(), It.IsAny<CryptoRiskAnalysis.API.Models.MarketDataSource>(), It.IsAny<bool>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new CryptoRiskAnalysis.API.Models.MarketQuote(100m, "Binance", "USDT", DateTimeOffset.UtcNow, null));
+        return quotes.Object;
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -37,7 +45,7 @@ public class ApiPipelineTests
             .ReturnsAsync((history, 100m, 1000m, missingVolume ? 0m : 1000m));
         var controller = new CryptoRiskAnalysis.API.Controllers.RiskAnalysisController(
             service.Object, new RiskAnalysisEngine(NullLogger<RiskAnalysisEngine>.Instance),
-            NullLogger<CryptoRiskAnalysis.API.Controllers.RiskAnalysisController>.Instance);
+            NullLogger<CryptoRiskAnalysis.API.Controllers.RiskAnalysisController>.Instance, CreateQuotes());
         var application = new ApplicationBuilder(provider);
         application.UseMiddleware<ExceptionHandlingMiddleware>();
         application.Run(async context => { await controller.GetRiskAnalysis("bitcoin", 7, context.RequestAborted); });
@@ -60,7 +68,7 @@ public class ApiPipelineTests
             .ReturnsAsync((history, 100m, 1000m, 1000m));
         var controller = new CryptoRiskAnalysis.API.Controllers.RiskAnalysisController(
             service.Object, new RiskAnalysisEngine(NullLogger<RiskAnalysisEngine>.Instance),
-            NullLogger<CryptoRiskAnalysis.API.Controllers.RiskAnalysisController>.Instance);
+            NullLogger<CryptoRiskAnalysis.API.Controllers.RiskAnalysisController>.Instance, CreateQuotes());
         var response = await controller.GetRiskAnalysis("bitcoin", 7, TestContext.Current.CancellationToken);
         var ok = Assert.IsType<Microsoft.AspNetCore.Mvc.OkObjectResult>(response.Result);
         using var json = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));

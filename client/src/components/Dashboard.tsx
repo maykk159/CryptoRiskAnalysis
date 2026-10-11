@@ -1,8 +1,8 @@
-import { useQuery } from '@tanstack/react-query';
 import { RefreshCw, TriangleAlert } from 'lucide-react';
-import { getRiskAnalysis, getErrorMessage } from '../services/api';
+import { getErrorMessage } from '../services/api';
 import { ASSETS } from '../constants/assets';
 import { useAnalysisUrlState } from '../hooks/useAnalysisUrlState';
+import { useRiskAnalysis } from '../hooks/useRiskAnalysis';
 import { TimeRangeSelector } from './dashboard/TimeRangeSelector';
 import { AssetSelector } from './AssetSelector';
 import { RiskScoreCard } from './dashboard/RiskScoreCard';
@@ -30,20 +30,12 @@ export function Dashboard() {
     data,
     isPending,
     isFetching,
-    fetchStatus,
+    paused,
     error,
     isRefetchError,
-    refetch,
+    retryAnalysis,
     dataUpdatedAt,
-  } = useQuery({
-    queryKey: ['risk', selectedAssetId, selectedTimeRange],
-    queryFn: ({ signal }) => getRiskAnalysis(selectedAssetId, selectedTimeRange, signal),
-    refetchInterval: 60_000,
-  });
-  const paused = fetchStatus === 'paused';
-  const retryAnalysis = () => {
-    void refetch({ cancelRefetch: false });
-  };
+  } = useRiskAnalysis(selectedAssetId, selectedTimeRange);
   return (
     <div className="min-h-screen bg-canvas px-4 py-5 text-ink sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1280px]">
@@ -100,6 +92,7 @@ export function Dashboard() {
             priceHistory={data?.priceHistory}
             loading={isPending}
             updatedAt={dataUpdatedAt}
+            quote={data?.currentQuote}
           />
           {(error || paused) && (
             <div
@@ -141,11 +134,12 @@ export function Dashboard() {
             {data && (
               <>
                 <div className="analysis-grid">
-                  <RiskScoreCard key={`${selectedAssetId}-${selectedTimeRange}`} data={data} />
+                  <RiskScoreCard key={`risk-${selectedAssetId}-${selectedTimeRange}`} data={data} />
                   <PriceChart
                     key={`${selectedAssetId}-${selectedTimeRange}`}
                     data={data.priceHistory}
                     timeRange={selectedTimeRange}
+                    currency={data.currentQuote?.currency}
                   />
                 </div>
                 <AdvancedMetrics data={data} />
@@ -175,8 +169,8 @@ export function Dashboard() {
               analytical indicators, not probabilities or investment advice.
             </p>
             <p className="mt-1">
-              Automatic fetch every 60 seconds while active. Results may be cached by the server.
-              “Last fetched” records browser receipt, not the source price observation time.
+              Automatic fetch every 10 seconds while active. Quotes may be briefly cached by the
+              server. “Last fetched” records browser receipt, not the source price observation time.
             </p>
             {isRefetchError && (
               <p className="mt-1 text-warning">

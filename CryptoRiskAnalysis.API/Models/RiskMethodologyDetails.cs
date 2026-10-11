@@ -8,9 +8,9 @@ public class RiskMethodologyDetails
     public int ReturnCount { get; set; }
     public long PeriodStart { get; set; }
     public long PeriodEnd { get; set; }
-    public decimal VolatilityWeight => 0.4m;
-    public decimal TrendWeight => 0.3m;
-    public decimal VolumeWeight => 0.3m;
+    public decimal VolatilityWeight => RiskMethodology.VolatilityWeight;
+    public decimal TrendWeight => RiskMethodology.TrendWeight;
+    public decimal VolumeWeight => RiskMethodology.VolumeWeight;
     public decimal VolatilityContribution { get; set; }
     public decimal TrendContribution { get; set; }
     public decimal VolumeContribution { get; set; }

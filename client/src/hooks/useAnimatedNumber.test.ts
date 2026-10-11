@@ -31,6 +31,33 @@ function advance(time: number) {
   act(() => tick(now));
 }
 
+it('reacts to live reduced-motion changes and unsubscribes on unmount', () => {
+  const media = new EventTarget() as EventTarget & { matches: boolean };
+  media.matches = false;
+  const remove = vi.spyOn(media, 'removeEventListener');
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => media)
+  );
+  const { result, unmount } = renderHook(() => useAnimatedNumber(80));
+  advance(100);
+  expect(result.current).toBeLessThan(80);
+  act(() => {
+    media.matches = true;
+    media.dispatchEvent(new Event('change'));
+  });
+  expect(result.current).toBe(80);
+  expect(cancelAnimationFrame).toHaveBeenCalled();
+  act(() => {
+    media.matches = false;
+    media.dispatchEvent(new Event('change'));
+  });
+  advance(450);
+  expect(result.current).toBe(80);
+  unmount();
+  expect(remove).toHaveBeenCalledWith('change', expect.any(Function));
+});
+
 it('counts up on entry and reaches the exact target after 650 ms', () => {
   const { result } = renderHook(() => useAnimatedNumber(80));
   expect(result.current).toBe(0);

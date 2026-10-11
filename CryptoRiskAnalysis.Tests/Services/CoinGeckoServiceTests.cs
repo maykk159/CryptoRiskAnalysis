@@ -13,13 +13,34 @@ namespace CryptoRiskAnalysis.Tests.Services
     public class CoinGeckoServiceTests
     {
         [Fact]
+        public async Task GetAllMarketDataAsync_PreservesDecimalPrecision()
+        {
+            var timestamp = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-1), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            const decimal price = 0.000007651234567890123456789m;
+            const decimal volume = 1234567890.123456789012345678m;
+            var payload = JsonSerializer.Serialize(new
+            {
+                prices = new object[][] { new object[] { timestamp, price } },
+                total_volumes = new object[][] { new object[] { timestamp, volume } }
+            });
+            using var client = CreateHttpClient(payload);
+            using var cache = new MemoryCache(new MemoryCacheOptions());
+            var service = new CoinGeckoService(client, cache, Mock.Of<ILogger<CoinGeckoService>>());
+            var result = await service.GetAllMarketDataAsync("test", 1, TestContext.Current.CancellationToken);
+            Assert.Equal(price, result.currentPrice);
+            Assert.Equal(price, Assert.Single(result.priceHistory).Price);
+            Assert.Equal(volume, result.currentVolume);
+            Assert.Equal(volume, result.avgVolume);
+        }
+
+        [Fact]
         public async Task GetAllMarketDataAsync_RequestsDailyDataAndExcludesIntradayPoint()
         {
             var today = DateTimeOffset.UtcNow.Date;
             var firstTimestamp = new DateTimeOffset(today.AddDays(-2), TimeSpan.Zero).ToUnixTimeMilliseconds();
             var firstIntradayTimestamp = new DateTimeOffset(today.AddDays(-2).AddHours(12), TimeSpan.Zero).ToUnixTimeMilliseconds();
             var completedTimestamp = new DateTimeOffset(today.AddDays(-1), TimeSpan.Zero).ToUnixTimeMilliseconds();
-            var intradayTimestamp = new DateTimeOffset(today.AddHours(1), TimeSpan.Zero).ToUnixTimeMilliseconds();
+            var intradayTimestamp = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
             var payload = JsonSerializer.Serialize(new
             {
@@ -211,6 +232,8 @@ namespace CryptoRiskAnalysis.Tests.Services
         [Fact]
         public async Task GetAllMarketDataAsync_ConcurrentCacheMissesShareOneProviderCall()
         {
+            using var deadline = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+            deadline.CancelAfter(TimeSpan.FromSeconds(30));
             var timestamp = new DateTimeOffset(DateTimeOffset.UtcNow.Date.AddDays(-1), TimeSpan.Zero)
                 .ToUnixTimeMilliseconds();
             var payload = JsonSerializer.Serialize(new
@@ -227,11 +250,11 @@ namespace CryptoRiskAnalysis.Tests.Services
                     "SendAsync",
                     ItExpr.IsAny<HttpRequestMessage>(),
                     ItExpr.IsAny<CancellationToken>())
-                .Returns(async () =>
+                .Returns(async (HttpRequestMessage _, CancellationToken token) =>
                 {
                     Interlocked.Increment(ref providerCalls);
-                    providerStarted.SetResult();
-                    await releaseProvider.Task;
+                    providerStarted.TrySetResult();
+                    await releaseProvider.Task.WaitAsync(token);
                     return new HttpResponseMessage
                     {
                         StatusCode = HttpStatusCode.OK,
@@ -247,17 +270,29 @@ namespace CryptoRiskAnalysis.Tests.Services
             var secondService = new CoinGeckoService(httpClient, cache, logger, requestLock);
 
             var firstRequest = firstService.GetAllMarketDataAsync(
-                "bitcoin", 1, TestContext.Current.CancellationToken);
-            await providerStarted.Task;
-            var secondRequest = secondService.GetAllMarketDataAsync(
-                "bitcoin", 1, TestContext.Current.CancellationToken);
+                "bitcoin", 1, deadline.Token);
+            try
+            {
+                await providerStarted.Task.WaitAsync(deadline.Token);
+                var secondRequest = secondService.GetAllMarketDataAsync(
+                    "bitcoin", 1, deadline.Token);
 
-            Assert.Equal(1, Volatile.Read(ref providerCalls));
-            releaseProvider.SetResult();
-            await Task.WhenAll(firstRequest, secondRequest);
+                Assert.False(firstRequest.IsCompleted);
+                Assert.False(secondRequest.IsCompleted);
+                Assert.Equal(1, Volatile.Read(ref providerCalls));
+                releaseProvider.TrySetResult();
+                var results = await Task.WhenAll(firstRequest, secondRequest).WaitAsync(deadline.Token);
 
-            Assert.Equal(1, providerCalls);
-            Assert.Equal(firstRequest.Result.currentVolume, secondRequest.Result.currentVolume);
+                Assert.Equal(1, providerCalls);
+                Assert.Equal(results[0].priceHistory.Select(p => (p.Timestamp, p.Price)),
+                    results[1].priceHistory.Select(p => (p.Timestamp, p.Price)));
+                Assert.Equal(results[0].currentVolume, results[1].currentVolume);
+            }
+            finally
+            {
+                releaseProvider.TrySetResult();
+                await deadline.CancelAsync();
+            }
         }
 
         private static HttpClient CreateHttpClient(string payload)

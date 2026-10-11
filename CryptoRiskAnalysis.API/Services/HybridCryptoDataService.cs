@@ -32,7 +32,7 @@ namespace CryptoRiskAnalysis.API.Services
         /// 1. Try Binance first for mapped assets (1-minute cache).
         /// 2. Fall back to CoinGecko when needed (1-minute cache).
         /// </summary>
-        public async Task<(List<PriceData> priceHistory, decimal currentPrice, decimal currentVolume, decimal avgVolume)> GetAllMarketDataAsync(
+        public async Task<MarketDataSnapshot> GetAllMarketDataAsync(
             string assetId,
             int days,
             CancellationToken cancellationToken = default)
@@ -52,6 +52,7 @@ namespace CryptoRiskAnalysis.API.Services
                 catch (Exception ex) when (ex is MarketDataProviderException
                                                or UpstreamRateLimitException
                                                or TimeoutRejectedException
+                                               or TimeoutException
                                                or BrokenCircuitException)
                 {
                     _logger.LogWarning(ex, "Binance failed for {AssetId}, falling back to CoinGecko", assetId);
