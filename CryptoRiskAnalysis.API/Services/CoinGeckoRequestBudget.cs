@@ -16,8 +16,19 @@ public sealed class CoinGeckoRequestBudget(IOptions<CoinGeckoOptions> options, T
     private readonly Queue<long> _attempts = new();
     private TimeSpan _cooldown;
     private long _cooldownStarted;
+    private object? _cooldownOwner;
 
-    public void Acquire(CancellationToken cancellationToken)
+    public void Acquire(CancellationToken cancellationToken) => AcquireOrGetDelay(null, cancellationToken);
+
+    internal async ValueTask AcquireAsync(object? retryOwner, CancellationToken cancellationToken)
+    {
+        // A retry timer can resume just before the monotonic cooldown ends. Recheck
+        // after waiting so no attempt reaches the provider sooner than allowed.
+        while (AcquireOrGetDelay(retryOwner, cancellationToken) is { Ticks: > 0 } delay)
+            await Task.Delay(TimeSpan.FromMilliseconds(Math.Ceiling(delay.TotalMilliseconds)), clock, cancellationToken);
+    }
+
+    private TimeSpan AcquireOrGetDelay(object? retryOwner, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         lock (_sync)
@@ -29,15 +40,22 @@ public sealed class CoinGeckoRequestBudget(IOptions<CoinGeckoOptions> options, T
             if (_attempts.Count >= options.Value.RequestsPerMinute)
             {
                 var quotaWait = TimeSpan.FromMinutes(1) - clock.GetElapsedTime(_attempts.Peek(), now);
-                if (quotaWait > wait) wait = quotaWait;
+                throw new UpstreamRateLimitException("CoinGecko", quotaWait > wait ? quotaWait : wait);
             }
             if (wait > TimeSpan.Zero)
-                throw new UpstreamRateLimitException("CoinGecko", wait);
+            {
+                if (retryOwner is null || !ReferenceEquals(retryOwner, _cooldownOwner))
+                    throw new UpstreamRateLimitException("CoinGecko", wait);
+                return wait;
+            }
             _attempts.Enqueue(now);
+            return TimeSpan.Zero;
         }
     }
 
-    public void Defer(TimeSpan delay)
+    public void Defer(TimeSpan delay) => Defer(delay, null);
+
+    internal void Defer(TimeSpan delay, object? owner)
     {
         if (delay <= TimeSpan.Zero) return;
         lock (_sync)
@@ -47,6 +65,7 @@ public sealed class CoinGeckoRequestBudget(IOptions<CoinGeckoOptions> options, T
             {
                 _cooldown = delay;
                 _cooldownStarted = now;
+                _cooldownOwner = owner;
             }
         }
     }

@@ -23,9 +23,10 @@ data are not retried. Caller cancellation propagates.
 Both seconds and HTTP-date `Retry-After` headers are honored. A 429 also creates a
 shared cooldown; without a header, the cooldown is two seconds. New attempts
 during cooldown or quota exhaustion fail promptly without reaching the provider.
-They produce HTTP 429 with a rounded-up `Retry-After` header. This can stop a retry
-sequence early. Long provider delays are not shortened to force a retry; an
-ongoing request can hit its total timeout (504) while the shared cooldown remains.
+They produce HTTP 429 with a rounded-up `Retry-After` header. A retry that resumes
+slightly before its own cooldown ends waits for the remaining time. Quota exhaustion
+and cooldowns set by other requests can still stop a retry sequence early. An ongoing
+request can hit its total timeout (504) while the shared cooldown remains.
 
 The existing circuit breaker evaluates a 50% failure ratio after a minimum of
 five outcomes within 30 seconds; it opens for 30 seconds. It is not a count of
