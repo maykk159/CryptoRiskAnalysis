@@ -70,7 +70,21 @@ describe('RiskScoreCard', () => {
     expect(pointer).not.toBeNull();
     expect(Number(pointer!.getAttribute('cx'))).toBeCloseTo(x);
     expect(Number(pointer!.getAttribute('cy'))).toBeCloseTo(y);
-    expect(container.querySelector('.risk-dial p')?.textContent).toBe(score.toFixed(1));
+    expect(container.querySelector('.risk-dial p')?.textContent).toBe(score.toFixed(2));
+  });
+
+  it.each([
+    [29.99, '29.99', 'Low risk'],
+    [30, '30.00', 'Medium risk'],
+    [69.99, '69.99', 'Medium risk'],
+    [70, '70.00', 'High risk'],
+  ])('shows score %f with its matching risk level', (score, formatted, label) => {
+    const { container } = render(
+      <RiskScoreCard data={{ ...data, compositeRiskScore: score, volumeScore: score }} />
+    );
+    expect(container.querySelector('.risk-dial p')?.textContent).toBe(formatted);
+    expect(container.querySelector('.risk-badge')?.textContent).toBe(label);
+    expect(bar('Volume risk').parentElement!.parentElement!.textContent).toContain(formatted);
   });
 
   it.each([NaN, undefined, Infinity, -1, 101])(
@@ -100,36 +114,37 @@ describe('RiskScoreCard', () => {
     expect(details.hidden).toBe(true);
   });
 
-  it('animates the numbers and bars together while keeping the colored dial fixed', () => {
+  it('animates the indicator and bars while showing the final scores', () => {
     const { container, rerender } = render(<RiskScoreCard data={data} />);
     const dial = container.querySelector('.risk-dial')!;
     const arc = dial.querySelector('svg g')!.outerHTML;
-    expect(dial.querySelector('p')?.textContent).toBe('0.0');
+    const pointerX = () => Number(dial.querySelector('circle')?.getAttribute('cx'));
+    expect(dial.querySelector('p')?.textContent).toBe('80.00');
+    expect(pointerX()).toBeCloseTo(20);
     for (const label of ['Volatility risk', 'Trend risk', 'Volume risk'])
       expect(bar(label).style.width).toBe('0%');
     advance(325);
-    expect(dial.querySelector('p')?.textContent).toBe('70.0');
+    expect(dial.querySelector('p')?.textContent).toBe('80.00');
+    expect(pointerX()).toBeCloseTo(178.78);
     for (const [label, width] of [
       ['Volatility risk', 35],
       ['Trend risk', 52.5],
       ['Volume risk', 70],
     ] as const) {
       expect(bar(label).style.width).toBe(`${width}%`);
-      expect(bar(label).parentElement!.parentElement!.textContent).toContain(width.toFixed(1));
     }
     expect(dial.querySelector('svg g')!.outerHTML).toBe(arc);
     advance(650);
-    expect(dial.querySelector('p')?.textContent).toBe('80.0');
+    expect(pointerX()).toBeCloseTo(200.9);
     expect(bar('Volatility risk').style.width).toBe('40%');
     expect(bar('Trend risk').style.width).toBe('60%');
     expect(bar('Volume risk').style.width).toBe('80%');
     rerender(<RiskScoreCard data={{ ...data, compositeRiskScore: 40, volumeScore: 40 }} />);
-    expect(dial.querySelector('p')?.textContent).toBe('80.0');
+    expect(dial.querySelector('p')?.textContent).toBe('40.00');
+    expect(pointerX()).toBeCloseTo(200.9);
     advance(825);
-    expect(dial.querySelector('p')?.textContent).toBe('45.0');
     expect(bar('Volume risk').style.width).toBe('45%');
     advance(1000);
-    expect(dial.querySelector('p')?.textContent).toBe('40.0');
     expect(bar('Volume risk').style.width).toBe('40%');
   });
 

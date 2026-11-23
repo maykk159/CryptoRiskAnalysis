@@ -42,7 +42,12 @@ export function RiskScoreCard({
           <p className="mt-0.5 text-xs text-muted">Composite risk score</p>
         </div>
       </div>
-      <RiskDial score={animatedScore} valid={level.valid} color={level.color} />
+      <RiskDial
+        score={score}
+        animatedScore={animatedScore}
+        valid={level.valid}
+        color={level.color}
+      />
       <div className="flex items-center justify-between text-xs text-muted">
         <span>Low · 0</span>
         <span className={`risk-badge ${level.color}`}>
@@ -77,7 +82,7 @@ export function RiskScoreCard({
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-1 text-xs">
                   <span className="text-secondary">{label}</span>
                   <span className={`font-semibold tabular-nums ${component.color}`}>
-                    {component.valid ? animatedComponents[key].toFixed(1) : '—'}
+                    {component.valid ? data[key].toFixed(2) : '—'}
                     <span className="font-normal text-muted"> /100</span>
                     <span className="sr-only"> · {component.label}</span>
                   </span>

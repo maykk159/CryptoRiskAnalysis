@@ -1,8 +1,13 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using CryptoRiskAnalysis.API.Extensions;
+using CryptoRiskAnalysis.API.Interfaces;
+using CryptoRiskAnalysis.API.Models;
 using CryptoRiskAnalysis.API.Services;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Http.Resilience;
 using Microsoft.Extensions.Logging;
 using Moq;
 
@@ -28,6 +33,72 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.Equal(1, calls);
         }
 
+        [Theory]
+        [InlineData(false, 2)]
+        [InlineData(true, 1)]
+        public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceResponseBodyStalls(
+            bool retryExceedsTotalTimeout, int expectedBinanceCalls)
+        {
+            var binanceCalls = 0;
+            var coinGeckoCalls = 0;
+            await using var provider = CreateProvider(
+                new StubHttpMessageHandler((_, _) =>
+                {
+                    binanceCalls++;
+                    return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new SlowContent() });
+                }),
+                new StubHttpMessageHandler((_, _) =>
+                {
+                    coinGeckoCalls++;
+                    return Task.FromResult(JsonResponse(CreateCoinGeckoPayload()));
+                }),
+                options =>
+                {
+                    options.AttemptTimeout.Timeout = TimeSpan.FromMilliseconds(100);
+                    options.TotalRequestTimeout.Timeout = retryExceedsTotalTimeout
+                        ? TimeSpan.FromMilliseconds(500) : TimeSpan.FromSeconds(3);
+                    options.Retry.MaxRetryAttempts = 1;
+                    options.Retry.Delay = retryExceedsTotalTimeout ? TimeSpan.FromSeconds(10) : TimeSpan.Zero;
+                    options.Retry.UseJitter = false;
+                });
+            using var scope = provider.CreateScope();
+
+            var result = await scope.ServiceProvider.GetRequiredService<ICryptoDataService>()
+                .GetAllMarketDataAsync("bitcoin", 1, TestContext.Current.CancellationToken);
+
+            Assert.Equal(MarketDataSource.CoinGecko, result.Source);
+            Assert.Equal(100m, Assert.Single(result.priceHistory).Price);
+            Assert.Equal(expectedBinanceCalls, binanceCalls);
+            Assert.Equal(1, coinGeckoCalls);
+        }
+
+        [Fact]
+        public async Task GetAllMarketDataAsync_CallerCancellationDuringBinanceBodyRead_DoesNotFallback()
+        {
+            var bodyReadStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var coinGeckoCalls = 0;
+            await using var provider = CreateProvider(
+                new StubHttpMessageHandler((_, _) => Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new SlowContent(() => bodyReadStarted.TrySetResult())
+                })),
+                new StubHttpMessageHandler((_, _) =>
+                {
+                    coinGeckoCalls++;
+                    return Task.FromResult(JsonResponse(CreateCoinGeckoPayload()));
+                }));
+            using var scope = provider.CreateScope();
+            using var callerCancellation = CancellationTokenSource.CreateLinkedTokenSource(TestContext.Current.CancellationToken);
+
+            var request = scope.ServiceProvider.GetRequiredService<ICryptoDataService>()
+                .GetAllMarketDataAsync("bitcoin", 1, callerCancellation.Token);
+            await bodyReadStarted.Task.WaitAsync(TimeSpan.FromSeconds(5), TestContext.Current.CancellationToken);
+            await callerCancellation.CancelAsync();
+
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+            Assert.Equal(0, coinGeckoCalls);
+        }
+
         [Fact]
         public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceReturnsInvalidJson()
         {
@@ -49,7 +120,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.Equal(1, coinGeckoCalls);
             Assert.Single(result.priceHistory);
             Assert.Equal(100m, result.priceHistory[0].Price);
-            Assert.Equal(CryptoRiskAnalysis.API.Models.MarketDataSource.CoinGecko, result.Source);
+            Assert.Equal(MarketDataSource.CoinGecko, result.Source);
         }
 
         [Fact]
@@ -148,6 +219,18 @@ namespace CryptoRiskAnalysis.Tests.Services
                 Mock.Of<ILogger<HybridCryptoDataService>>());
         }
 
+        private static ServiceProvider CreateProvider(HttpMessageHandler binance, HttpMessageHandler coinGecko,
+            Action<HttpStandardResilienceOptions>? configureResilience = null)
+        {
+            var services = new ServiceCollection();
+            services.AddLogging();
+            services.AddApplicationServices(configureResilience);
+            services.AddHttpClient<BinanceSpotService>(client => client.Timeout = TimeSpan.FromSeconds(5))
+                .ConfigurePrimaryHttpMessageHandler(() => binance);
+            services.AddHttpClient<CoinGeckoService>().ConfigurePrimaryHttpMessageHandler(() => coinGecko);
+            return services.BuildServiceProvider();
+        }
+
         private static string CreateCoinGeckoPayload()
         {
             var timestamp = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-1), TimeSpan.Zero)
@@ -183,6 +266,21 @@ namespace CryptoRiskAnalysis.Tests.Services
             {
                 return _handler(request, cancellationToken);
             }
+        }
+
+        private sealed class SlowContent(Action? onReadStarted = null) : HttpContent
+        {
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context) =>
+                throw new InvalidOperationException("Cancellation-aware overload must be used.");
+
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext? context,
+                CancellationToken cancellationToken)
+            {
+                onReadStarted?.Invoke();
+                return Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+
+            protected override bool TryComputeLength(out long length) { length = 0; return false; }
         }
     }
 }

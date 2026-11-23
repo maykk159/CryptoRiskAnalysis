@@ -1,11 +1,12 @@
 interface RiskDialProps {
   score: number;
+  animatedScore: number;
   valid: boolean;
   color: string;
 }
 
-export function RiskDial({ score, valid, color }: RiskDialProps) {
-  const angle = (score / 100) * Math.PI;
+export function RiskDial({ score, animatedScore, valid, color }: RiskDialProps) {
+  const angle = (animatedScore / 100) * Math.PI;
   return (
     <div className="risk-dial">
       <svg viewBox="0 0 240 138" className="h-full w-full" aria-hidden="true">
@@ -65,7 +66,7 @@ export function RiskDial({ score, valid, color }: RiskDialProps) {
         <p
           className={`text-[52px] font-semibold leading-none tracking-tight tabular-nums ${color}`}
         >
-          {valid ? score.toFixed(1) : '—'}
+          {valid ? score.toFixed(2) : '—'}
         </p>
         <p className="mt-1 text-xs text-secondary">/100</p>
       </div>

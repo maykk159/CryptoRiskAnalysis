@@ -15,17 +15,18 @@ Permits are not refunded for failures, because the provider may have counted the
 
 The budget is inside the HTTP resilience pipeline. The pipeline explicitly uses
 exponential backoff, jitter, at most three retries, 10-second attempt timeouts and
-a 30-second overall timeout. CoinGecko response body buffering is inside the
-pipeline as well, so a stalled body cannot escape the timeout. Network failures,
+a 30-second overall timeout. Both providers buffer response bodies inside the
+pipeline, so the attempt and overall limits cover stalled downloads. Network failures,
 408, 429 and 5xx responses are retryable; ordinary 4xx and invalid parsed market
 data are not retried. Caller cancellation propagates.
 
 Both seconds and HTTP-date `Retry-After` headers are honored. A 429 also creates a
 shared cooldown; without a header, the cooldown is two seconds. New attempts
 during cooldown or quota exhaustion fail promptly without reaching the provider.
-They produce HTTP 429 with a rounded-up `Retry-After` header. This can stop a retry
-sequence early. Long provider delays are not shortened to force a retry; an
-ongoing request can hit its total timeout (504) while the shared cooldown remains.
+They produce HTTP 429 with a rounded-up `Retry-After` header. A retry that resumes
+slightly before its own cooldown ends waits for the remaining time. Quota exhaustion
+and cooldowns set by other requests can still stop a retry sequence early. An ongoing
+request can hit its total timeout (504) while the shared cooldown remains.
 
 The existing circuit breaker evaluates a 50% failure ratio after a minimum of
 five outcomes within 30 seconds; it opens for 30 seconds. It is not a count of
@@ -89,10 +90,10 @@ fetches a recent window beginning at the earliest missing date through yesterday
 using the selected provider's existing adapter. It re-reads the database and
 requires the entire requested window to be present before responding.
 
-Provider cache entries retain every daily price and volume. A cache hit also
-upserts these observations for the requested asset ID before returning, so an
-empty archive can be repaired without another HTTP call. Binance aliases sharing
-a symbol (for example `matic-network` and `polygon-ecosystem-token`) share the
+Provider cache entries retain every daily price and volume. A cache hit inserts
+missing observations for the requested asset ID before returning. This fills archive
+gaps without another HTTP call and preserves corrections from newer fetches.
+Binance aliases sharing a symbol (for example `matic-network` and `polygon-ecosystem-token`) share the
 provider cache but each receives its own archive rows. This adds a small SQLite
 batch write on provider cache hits; reads of complete historical windows remain
 read-only.

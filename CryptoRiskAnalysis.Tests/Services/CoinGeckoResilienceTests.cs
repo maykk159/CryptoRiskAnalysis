@@ -121,21 +121,70 @@ public class CoinGeckoResilienceTests
     [Fact]
     public async Task RetryAfter_IsRespectedBeforeSuccessfulRetry()
     {
+        var retryAfter = TimeSpan.FromSeconds(1);
         var calls = 0;
         var elapsed = Stopwatch.StartNew();
         await using var provider = CreateProvider(new StubHandler((_, _) =>
         {
             calls++;
-            if (calls > 1) return Task.FromResult(Success());
+            if (calls > 1)
+            {
+                Assert.True(elapsed.Elapsed >= retryAfter);
+                return Task.FromResult(Success());
+            }
             elapsed.Restart();
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
-            response.Headers.RetryAfter = new RetryConditionHeaderValue(TimeSpan.FromSeconds(1));
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(retryAfter);
             return Task.FromResult(response);
         }));
         var result = await provider.GetRequiredService<CoinGeckoService>().GetAllMarketDataAsync("bitcoin", 1, TestContext.Current.CancellationToken);
         Assert.Single(result.priceHistory);
         Assert.Equal(2, calls);
-        Assert.True(elapsed.Elapsed >= TimeSpan.FromMilliseconds(950));
+    }
+
+    [Fact]
+    public async Task RetryBeforeOwnCooldownEnds_WaitsWhileOtherRequestsAreRejected()
+    {
+        var clock = new ManualClock();
+        var retryAfter = TimeSpan.FromSeconds(1);
+        var timeRemaining = TimeSpan.FromTicks(1);
+        var calls = 0;
+        await using var provider = CreateProvider(new StubHandler((_, _) =>
+        {
+            if (Interlocked.Increment(ref calls) > 1) return Task.FromResult(Success());
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+            response.Headers.RetryAfter = new RetryConditionHeaderValue(retryAfter);
+            return Task.FromResult(response);
+        }), configure: options =>
+        {
+            // Simulate the retry timer resuming one tick before the cooldown ends.
+            options.Retry.DelayGenerator = static _ => ValueTask.FromResult<TimeSpan?>(TimeSpan.Zero);
+            options.Retry.OnRetry = _ =>
+            {
+                clock.Advance(retryAfter - timeRemaining);
+                return default;
+            };
+        }, clock: clock);
+        var service = provider.GetRequiredService<CoinGeckoService>();
+        var token = TestContext.Current.CancellationToken;
+        var retry = service.GetAllMarketDataAsync("bitcoin", 1, token);
+        try
+        {
+            var first = await Task.WhenAny(clock.TimerScheduled, retry).WaitAsync(TimeSpan.FromSeconds(5), token);
+            if (first == retry) await retry;
+            Assert.Same(clock.TimerScheduled, first);
+            var rejection = await Assert.ThrowsAsync<UpstreamRateLimitException>(() =>
+                service.GetAllMarketDataAsync("ethereum", 1, token));
+            Assert.Equal(timeRemaining, rejection.RetryAfter);
+            Assert.Equal(1, Volatile.Read(ref calls));
+        }
+        finally
+        {
+            clock.Advance(timeRemaining);
+        }
+
+        Assert.Single((await retry.WaitAsync(TimeSpan.FromSeconds(5), token)).priceHistory);
+        Assert.Equal(2, calls);
     }
 
     [Theory]
@@ -193,10 +242,11 @@ public class CoinGeckoResilienceTests
     }
 
     private static ServiceProvider CreateProvider(HttpMessageHandler handler, int budget = 20,
-        Action<HttpStandardResilienceOptions>? configure = null)
+        Action<HttpStandardResilienceOptions>? configure = null, TimeProvider? clock = null)
     {
         var services = new ServiceCollection();
         services.AddLogging();
+        if (clock is not null) services.AddSingleton(clock);
         services.AddApplicationServices(o =>
         {
             o.Retry.Delay = TimeSpan.Zero;
@@ -251,10 +301,19 @@ public class CoinGeckoResilienceTests
 
     private sealed class ManualClock : TimeProvider
     {
+        private readonly TaskCompletionSource _timerScheduled = new(TaskCreationOptions.RunContinuationsAsynchronously);
         private long _ticks;
+        public Task TimerScheduled => _timerScheduled.Task;
         public override long TimestampFrequency => TimeSpan.TicksPerSecond;
-        public override long GetTimestamp() => _ticks;
-        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch.AddTicks(_ticks);
-        public void Advance(TimeSpan duration) => _ticks += duration.Ticks;
+        public override long GetTimestamp() => Interlocked.Read(ref _ticks);
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch.AddTicks(GetTimestamp());
+        public void Advance(TimeSpan duration) => Interlocked.Add(ref _ticks, duration.Ticks);
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            var timer = base.CreateTimer(callback, state, dueTime, period);
+            _timerScheduled.TrySetResult();
+            return timer;
+        }
     }
 }

@@ -57,7 +57,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("CoinGecko Cache HIT for {AssetId}", assetId);
-                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
+                await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
                 return cachedData.Data;
             }
 
@@ -65,7 +65,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("CoinGecko Cache HIT after waiting for {AssetId}", assetId);
-                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
+                await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
                 return cachedData.Data;
             }
 

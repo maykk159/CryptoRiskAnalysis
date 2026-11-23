@@ -15,4 +15,8 @@ internal sealed record CachedMarketData(
     public Task PersistAsync(IHistoricalMarketDataStore? store, string assetId, MarketDataSource source,
         CancellationToken cancellationToken) =>
         store?.SaveAsync(assetId, source, Observations, cancellationToken) ?? Task.CompletedTask;
+
+    public Task PersistMissingAsync(IHistoricalMarketDataStore? store, string assetId, MarketDataSource source,
+        CancellationToken cancellationToken) =>
+        store?.InsertMissingAsync(assetId, source, Observations, cancellationToken) ?? Task.CompletedTask;
 }

@@ -24,8 +24,16 @@ public sealed class SqliteHistoricalMarketDataStore : IHistoricalMarketDataStore
         }.ToString();
     }
 
-    public async Task SaveAsync(string assetId, MarketDataSource source,
-        IReadOnlyList<DailyMarketObservation> observations, CancellationToken cancellationToken)
+    public Task SaveAsync(string assetId, MarketDataSource source,
+        IReadOnlyList<DailyMarketObservation> observations, CancellationToken cancellationToken) =>
+        WriteAsync(assetId, source, observations, overwriteExisting: true, cancellationToken);
+
+    public Task InsertMissingAsync(string assetId, MarketDataSource source,
+        IReadOnlyList<DailyMarketObservation> observations, CancellationToken cancellationToken) =>
+        WriteAsync(assetId, source, observations, overwriteExisting: false, cancellationToken);
+
+    private async Task WriteAsync(string assetId, MarketDataSource source,
+        IReadOnlyList<DailyMarketObservation> observations, bool overwriteExisting, CancellationToken cancellationToken)
     {
         ValidateKey(assetId, source);
         ArgumentNullException.ThrowIfNull(observations);
@@ -45,11 +53,13 @@ public sealed class SqliteHistoricalMarketDataStore : IHistoricalMarketDataStore
             using var transaction = connection.BeginTransaction();
             using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = """
+            var onConflict = overwriteExisting
+                ? "DO UPDATE SET timestamp_ms = excluded.timestamp_ms, price = excluded.price, volume = excluded.volume"
+                : "DO NOTHING";
+            command.CommandText = $"""
                 INSERT INTO daily_market_data(asset_id, source, quote_currency, utc_day, timestamp_ms, price, volume)
                 VALUES ($asset, $source, $currency, $day, $timestamp, $price, $volume)
-                ON CONFLICT(asset_id, source, quote_currency, utc_day) DO UPDATE SET
-                    timestamp_ms = excluded.timestamp_ms, price = excluded.price, volume = excluded.volume;
+                ON CONFLICT(asset_id, source, quote_currency, utc_day) {onConflict};
                 """;
             command.Parameters.AddWithValue("$asset", assetId);
             command.Parameters.AddWithValue("$source", source.ToString());

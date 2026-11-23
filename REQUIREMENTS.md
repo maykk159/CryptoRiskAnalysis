@@ -4,11 +4,11 @@
 
 | Tool | Supported version | Purpose |
 |---|---|---|
-| .NET SDK | Stable 10.0.x, minimum 10.0.100 | API and backend tests; selected through `global.json` |
-| Node.js | 22.22.2+ within 22.x, 24.15.0+ within 24.x, or 26+ | Client and test tools; CI uses Node 24 |
+| [.NET SDK](https://dotnet.microsoft.com/download/dotnet/10.0) | Stable 10.0.x, minimum 10.0.100 | API and backend tests; selected through `global.json` |
+| [Node.js](https://nodejs.org/) | 22.22.2+ within 22.x, 24.15.0+ within 24.x, or 26+ | Client and test tools; CI uses Node 24 |
 | npm | 10+ | Lockfile-based dependency installation |
 | PowerShell | 5.1+ on Windows | Setup wrapper and regression tests |
-| Git | A supported release | Clone and update the repository |
+| [Git](https://git-scm.com/) | A supported release | Clone and update the repository |
 
 The frontend requirements are declared in `client/package.json`. `client/.npmrc` also enforces them for manual npm installs. Node 20, 21, 23, and 25 do not meet the project's supported engine ranges.
 
@@ -66,6 +66,8 @@ npm run dev
 - Client: `http://localhost:5173`
 - No API keys or database setup are required. Existing `.env.local` and appsettings files are preserved.
 
+Press `Ctrl+C` to stop an application. If PowerShell blocks `npm.ps1`, use `npm.cmd run dev`; this invokes the same CLI without changing execution policy. See [frontend configuration](README.md#configuration) and [backend deployment settings](docs/architecture.md#reliability-and-configuration).
+
 ## Verify
 
 ```powershell
@@ -81,6 +83,26 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Test-Setup.ps1
 ```
 
 These checks use fake native CLIs and temporary copies under `TestResults`, so they do not alter the real dependencies or require network access. They also run in GitHub Actions.
+
+For individual backend checks, after restoring dependencies, run from the repository root:
+
+```powershell
+dotnet format CryptoRiskAnalysis.API.sln --verify-no-changes --no-restore
+dotnet build CryptoRiskAnalysis.API.sln --configuration Release --no-restore -warnaserror
+dotnet test CryptoRiskAnalysis.Tests/CryptoRiskAnalysis.Tests.csproj --configuration Release --no-build --no-restore
+```
+
+For frontend checks, run from the repository root:
+
+```powershell
+cd client
+npm.cmd run format:check
+npm.cmd run lint
+npm.cmd test
+npm.cmd run build
+```
+
+On macOS/Linux, use `npm` instead of `npm.cmd`. Backend formatting is a separate check in CI; `setup.cmd -Verify` runs the backend build and tests but does not run `dotnet format`. See [verification scope](docs/architecture.md#verification).
 
 ## Troubleshooting
 

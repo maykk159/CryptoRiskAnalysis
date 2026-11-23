@@ -1,3 +1,5 @@
+> **Archived review record — September 10–11, 2026.** Preserved during documentation consolidation on October 11, 2026. Test counts, local run observations, and findings describe that review, not the current working tree. See [current architecture](../architecture.md) and [market-data behavior](../market-data.md).
+
 # Bug raporu değerlendirmesi — 10 Eylül 2026
 
 Mevcut çalışma ağacı üzerinden incelendi; önceden yapılmış değişiklikler korundu.
@@ -49,7 +51,7 @@ dönüşte sunucudan yeniden doğruluyor. Risk formülleri ve SQLite şeması de
 Gerçek Binance yanıtlarıyla yerel API kontrol edildi: zorunlu yenileme alınma
 zamanını güncelledi ve sonraki dönem isteği yeni fiyat kaydını kullandı. Sayısal
 fiyatın her yenilemede değişmesi beklenmiyor; yeni istek ve zaman bilgisi doğrulanıyor.
-Yerel API yeni kodla 5058 portunda yeniden başlatıldı. Ayrıntılar: [veri akışı](market-data.md#current-quotes-and-explicit-refresh).
+Yerel API yeni kodla 5058 portunda yeniden başlatıldı. Ayrıntılar: [veri akışı](../market-data.md#current-quotes-and-explicit-refresh).
 
 ## Gemini takip bulguları — 11 Eylül 2026
 

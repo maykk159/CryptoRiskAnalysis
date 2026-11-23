@@ -62,7 +62,7 @@ This is a recommended portfolio backlog, not a list of implemented features. Pri
 | Priority | Gap | Why it matters | Concrete completion criterion |
 | --- | --- | --- | --- |
 | 1 — Before sharing | Current-version demo evidence | Existing screenshots are useful but predate 2.0.0; no hosted demo or video link is advertised in the README. | Add a short current-version recording or hosted demo; capture 7-day warnings and null Sharpe with clearly labeled fixtures, alongside a normal desktop/mobile view. |
-| 2 — Before sharing | Older explanatory reports disagree with the code | Root-level reports still mention Recharts, 180-second CoinGecko caching, or adaptive score weights. These conflict with the current implementation and can confuse reviewers. | Update or clearly archive [projectfirstreport.md](../projectfirstreport.md), [proje_mimari_ve_isleyis.md](../proje_mimari_ve_isleyis.md), and [ozellikler_nedenler_ve_calisma_mantigi.md](../ozellikler_nedenler_ve_calisma_mantigi.md); keep the historical QA report explicitly dated. |
+| 2 — Completed | Consolidated current documentation | Architecture and implementation behavior now have one current reference; earlier semester and bug-review reports are explicitly archived. | [Current architecture](architecture.md), [setup](../REQUIREMENTS.md), and [archived semester report](archive/projectfirstreport.md). The historical QA report remains explicitly dated. |
 | 3 — High | Full methodology explanation in the UI | The API returns contributions and input provenance, but the dashboard shows component scores and warnings without the complete metadata. | Add an accessible explanation panel showing version, input dates/counts, weights, and contributions whose rounded sum matches the composite. |
 | 4 — High | Portable browser regression coverage | Browser QA scripts already exist, but use a machine-specific runtime path and are not a frontend CI job. Component tests do not exercise a browser-to-API journey. | Make fixture-based browser checks reproducible in a clean environment and run them in CI: normal analysis, 7-day warnings, null Sharpe, failure/retry, and rapid period changes. |
 | 5 — Medium | API compatibility checks | Allowing null Sharpe changes the client contract. TypeScript annotations alone do not validate incoming JSON. | Add contract/schema checks for nullable metrics and methodology fields; document client migration expectations and test malformed successful responses. |
@@ -166,7 +166,7 @@ Use this for the later implementation, separately from the September 10 methodol
 
 ## Verification record
 
-Reviewed on **October 11, 2026** against local commit [`4f68c84`](https://github.com/maykk159/CryptoRiskAnalysis/tree/4f68c84e752d1764090b2b6d932bb3856ce438d5), with the methodology contribution checked against `210d2f2` and its parent diff. The risk engine and methodology tests are unchanged between the reference commit and this local HEAD.
+Reviewed on **October 11, 2026** against commit [`4f68c84`](https://github.com/maykk159/CryptoRiskAnalysis/tree/4f68c84e752d1764090b2b6d932bb3856ce438d5), with the methodology contribution checked against `210d2f2` and its parent diff. At that reviewed commit, the risk engine and methodology tests were unchanged from the reference commit. This is a historical verification record, not a fresh test run for later revisions.
 
 | Check | Observed result |
 | --- | --- |
@@ -174,6 +174,6 @@ Reviewed on **October 11, 2026** against local commit [`4f68c84`](https://github
 | `npm.cmd test` in `client/` | 110 passed across 13 files |
 | `npm.cmd run build` in `client/` | TypeScript and Vite production build passed |
 
-The initial `dotnet test --project ... --configuration Release --no-restore` invocation failed before executing tests because the sandbox denied the Microsoft.Testing.Platform named-pipe connection. After that command built the test assembly, it was executed successfully with `dotnet CryptoRiskAnalysis.Tests/bin/Release/net10.0/CryptoRiskAnalysis.Tests.dll`. The 167/110 counts describe the current local HEAD, not the September 10 snapshot. This review did not rerun the old browser QA or verify a hosted deployment or remote CI status.
+The initial `dotnet test --project ... --configuration Release --no-restore` invocation failed before executing tests because the sandbox denied the Microsoft.Testing.Platform named-pipe connection. After that command built the test assembly, it was executed successfully with `dotnet CryptoRiskAnalysis.Tests/bin/Release/net10.0/CryptoRiskAnalysis.Tests.dll`. The 167/110 counts describe the reviewed commit `4f68c84`, not the current working tree or the September 10 snapshot. This review did not rerun the old browser QA or verify a hosted deployment or remote CI status.
 
 Keep CV claims tied to the implementation and observed checks. This evidence supports correctness and engineering quality; it does not establish commercial adoption, revenue impact, prediction accuracy, latency improvements, or production availability.

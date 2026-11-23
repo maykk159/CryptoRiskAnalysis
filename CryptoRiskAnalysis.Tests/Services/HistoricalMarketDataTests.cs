@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using CryptoRiskAnalysis.API.Exceptions;
+using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Models;
 using CryptoRiskAnalysis.API.Services;
 using Microsoft.Extensions.Caching.Memory;
@@ -16,22 +17,14 @@ public sealed class HistoricalMarketDataTests : IDisposable
     public async Task WarmCache_BackfillsEmptyArchiveWithExactDailyVolumes(MarketDataSource source)
     {
         var points = Enumerable.Range(0, 3).Select(i => Row(Today.AddDays(-3 + i), 100 + i, 1000 + i * 250)).ToList();
-        var payload = source == MarketDataSource.Binance
-            ? JsonSerializer.Serialize(points.Select(p => new object[]
-                { p.Timestamp, "100", "110", "90", p.Price, "10", p.Timestamp + 86_399_999L, p.Volume }))
-            : JsonSerializer.Serialize(new
-            {
-                prices = points.Select(p => new[] { (decimal)p.Timestamp, p.Price }),
-                total_volumes = points.Select(p => new[] { (decimal)p.Timestamp, p.Volume })
-            });
         var calls = 0;
         using var client = new HttpClient(new StubHandler(_ =>
         {
             calls++;
-            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(payload) };
+            return ProviderResponse(source, points);
         }));
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        CryptoRiskAnalysis.API.Interfaces.ICryptoDataService warmProvider = source == MarketDataSource.Binance
+        ICryptoDataService warmProvider = source == MarketDataSource.Binance
             ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance)
             : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance);
         await warmProvider.GetAllMarketDataAsync("bitcoin", 3, Token);
@@ -39,6 +32,33 @@ public sealed class HistoricalMarketDataTests : IDisposable
         var result = await CreateService(store, client, cache).GetAsync("bitcoin", source, 3, null, Token);
         Assert.Equal(points, result.Observations);
         Assert.Equal(1, calls);
+    }
+
+    [Theory]
+    [InlineData(MarketDataSource.Binance)]
+    [InlineData(MarketDataSource.CoinGecko)]
+    public async Task OlderCachedWindow_DoesNotOverwriteCorrectionsFromNewProviderFetch(MarketDataSource source)
+    {
+        var today = Today;
+        var lastDay = today.AddDays(-1);
+        var original = Enumerable.Range(0, 7).Select(i => Row(today.AddDays(i - 7), 100m, 1000m)).ToList();
+        var corrected = Enumerable.Range(0, 30).Select(i => Row(today.AddDays(i - 30), 110m, 1200m)).ToList();
+        var calls = 0;
+        using var client = new HttpClient(new StubHandler(_ => ProviderResponse(source, ++calls == 1 ? original : corrected)));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        using var store = new SqliteHistoricalMarketDataStore(_path);
+        ICryptoDataService provider = source == MarketDataSource.Binance
+            ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, historyStore: store)
+            : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, historyStore: store);
+
+        await provider.GetAllMarketDataAsync("bitcoin", 7, Token);
+        await provider.GetAllMarketDataAsync("bitcoin", 30, Token);
+        var cached = await provider.GetAllMarketDataAsync("bitcoin", 7, Token);
+        var archived = await store.ReadAsync("bitcoin", source, today.AddDays(-30), lastDay, Token);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(100m, cached.priceHistory[^1].Price);
+        Assert.Equal(corrected, archived);
     }
 
     [Fact]
@@ -332,14 +352,20 @@ public sealed class HistoricalMarketDataTests : IDisposable
     private static HttpResponseMessage CoinGeckoResponse(int days)
     {
         var points = Enumerable.Range(0, days).Select(i => Row(Today.AddDays(-days + i))).ToList();
-        return new HttpResponseMessage(HttpStatusCode.OK)
-        {
-            Content = new StringContent(JsonSerializer.Serialize(new
+        return ProviderResponse(MarketDataSource.CoinGecko, points);
+    }
+
+    private static HttpResponseMessage ProviderResponse(MarketDataSource source, IReadOnlyList<DailyMarketObservation> points)
+    {
+        var payload = source == MarketDataSource.Binance
+            ? JsonSerializer.Serialize(points.Select(p => new object[]
+                { p.Timestamp, "100", "110", "90", p.Price, "10", p.Timestamp + 86_399_999L, p.Volume }))
+            : JsonSerializer.Serialize(new
             {
                 prices = points.Select(p => new[] { (decimal)p.Timestamp, p.Price }),
                 total_volumes = points.Select(p => new[] { (decimal)p.Timestamp, p.Volume })
-            }))
-        };
+            });
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(payload) };
     }
 
     private sealed class StubHandler(Func<HttpRequestMessage, HttpResponseMessage> send) : HttpMessageHandler
