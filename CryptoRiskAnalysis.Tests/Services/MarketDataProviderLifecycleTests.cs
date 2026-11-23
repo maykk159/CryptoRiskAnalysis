@@ -11,6 +11,9 @@ namespace CryptoRiskAnalysis.Tests.Services;
 
 public class MarketDataProviderLifecycleTests
 {
+    private static readonly DateTimeOffset Now = new(2024, 1, 16, 12, 0, 0, TimeSpan.Zero);
+    private static readonly TimeProvider Clock = Mock.Of<TimeProvider>(clock => clock.GetUtcNow() == Now);
+
     [Theory]
     [InlineData(MarketDataSource.Binance, "success")]
     [InlineData(MarketDataSource.CoinGecko, "success")]
@@ -84,8 +87,8 @@ public class MarketDataProviderLifecycleTests
 
     private static ICryptoDataService CreateService(MarketDataSource source, HttpClient client,
         IMemoryCache cache, IHistoricalMarketDataStore? store = null) => source == MarketDataSource.Binance
-        ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, historyStore: store)
-        : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, historyStore: store);
+        ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, historyStore: store, clock: Clock)
+        : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, historyStore: store, clock: Clock);
 
     private static string Payload(MarketDataSource source) => source == MarketDataSource.Binance
         ? "[[1705276800000,\"100\",\"110\",\"90\",\"100\",\"10\",1705363199999,\"1000\"]]"

@@ -14,6 +14,7 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly ILogger<BinanceSpotService> _logger;
         private readonly MarketDataRequestLock _requestLock;
         private readonly IHistoricalMarketDataStore? _historyStore;
+        private readonly TimeProvider _clock;
         internal Task<MarketQuote> GetCurrentQuoteAsync(string assetId, TimeProvider clock, CancellationToken cancellationToken) =>
             MarketQuoteReader.ReadAsync(_httpClient, assetId, MarketDataSource.Binance, clock, cancellationToken);
 
@@ -25,13 +26,15 @@ namespace CryptoRiskAnalysis.API.Services
             IMemoryCache cache,
             ILogger<BinanceSpotService> logger,
             MarketDataRequestLock? requestLock = null,
-            IHistoricalMarketDataStore? historyStore = null)
+            IHistoricalMarketDataStore? historyStore = null,
+            TimeProvider? clock = null)
         {
             _httpClient = httpClient;
             _cache = cache;
             _logger = logger;
             _requestLock = requestLock ?? new MarketDataRequestLock();
             _historyStore = historyStore;
+            _clock = clock ?? TimeProvider.System;
         }
 
         /// <summary>
@@ -54,7 +57,8 @@ namespace CryptoRiskAnalysis.API.Services
 
             // 2. Check cache first (1-minute cache for fresh data)
             string cacheKey = $"binance_{symbol}_{days}";
-            if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null)
+            if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null &&
+                MarketDataValidator.HasFreshEndDate(cachedData, _clock.GetUtcNow()))
             {
                 _logger.LogDebug("Binance Cache HIT for {AssetId} ({Symbol})", assetId, symbol);
                 await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
@@ -62,7 +66,8 @@ namespace CryptoRiskAnalysis.API.Services
             }
 
             using var requestLease = await _requestLock.AcquireAsync(cacheKey, cancellationToken);
-            if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null)
+            if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null &&
+                MarketDataValidator.HasFreshEndDate(cachedData, _clock.GetUtcNow()))
             {
                 _logger.LogDebug("Binance Cache HIT after waiting for {AssetId} ({Symbol})", assetId, symbol);
                 await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
@@ -107,8 +112,9 @@ namespace CryptoRiskAnalysis.API.Services
             HttpResponseMessage response, string symbol, int days, CancellationToken cancellationToken)
         {
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
+            var now = _clock.GetUtcNow();
             var klines = DeserializeKlines(content, symbol);
-            var (completedKlines, latestCloseValue) = SelectCompletedKlines(klines, symbol, days);
+            var (completedKlines, latestCloseValue) = SelectCompletedKlines(klines, symbol, days, now.ToUnixTimeMilliseconds());
             var (priceHistory, volumes, currentPrice) = ParseCompletedKlines(completedKlines, latestCloseValue);
             var volumeHistory = completedKlines
                 .Select((k, index) => (priceHistory[index].Timestamp, Volume: volumes[index]))
@@ -118,7 +124,7 @@ namespace CryptoRiskAnalysis.API.Services
 
             var (currentVolume, avgVolume) = CalculateVolumeStatistics(volumes, symbol);
             var result = new MarketDataSnapshot(priceHistory, currentPrice, currentVolume, avgVolume, MarketDataSource.Binance);
-            return CachedMarketData.Create(result, volumeHistory);
+            return MarketDataValidator.RequireFreshEndDate(CachedMarketData.Create(result, volumeHistory), now);
         }
 
         private static List<List<JsonElement>> DeserializeKlines(string content, string symbol)
@@ -136,19 +142,18 @@ namespace CryptoRiskAnalysis.API.Services
             if (klines == null || klines.Count == 0)
                 throw new MarketDataProviderException("Binance", $"no kline data was returned for {symbol}.");
 
-            if (klines.Any(k => k.Count < 8))
+            if (klines.Any(k => k is null || k.Count < 8))
                 throw new MarketDataProviderException("Binance", "a kline did not contain all required fields.");
             return klines;
         }
 
         private static (List<List<JsonElement>> Completed, JsonElement LatestClose) SelectCompletedKlines(
-            List<List<JsonElement>> klines, string symbol, int days)
+            List<List<JsonElement>> klines, string symbol, int days, long nowUnixMilliseconds)
         {
             List<List<JsonElement>> completedKlines;
             JsonElement latestCloseValue;
             try
             {
-                var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                 var parsedKlines = klines
                     .Select(k => (
                         Kline: k,

@@ -54,7 +54,7 @@ The frontend separates rendering from stateful behavior:
 1. The user selects an asset and a 7-, 30-, or 90-day window. The client requests `/api/RiskAnalysis/{assetId}?days={days}`.
 2. The controller validates the asset identifier and period. The hybrid service uses Binance when a symbol mapping exists; otherwise it uses CoinGecko.
 3. Expected Binance provider, rate-limit, timeout, or open-circuit failures allow fallback. Caller cancellation and unexpected programming errors propagate instead of silently triggering fallback.
-4. The provider returns exactly the requested number of completed daily price and volume observations. Prices must be positive; volumes must be nonnegative and aligned by UTC date. Missing or inconsistent inputs cannot become a successful analysis.
+4. The provider returns exactly the requested number of completed daily price and volume observations, ending on an expected recent UTC date. Prices must be positive, and volumes must be nonnegative and aligned by UTC date. See [provider date validation](market-data.md#persistent-daily-history).
 5. Validated observations are persisted before a new result is published to the daily cache. Concurrent cache misses for the same key share one provider fetch. Persistence failure prevents publication of that new cached result.
 6. The risk engine calculates all metrics locally from the validated inputs. Methodology 2.0.0 uses fixed volatility/trend/volume weights of 40/30/30 and reports contributions and limitations.
 7. The controller obtains a current quote from the historical series' provider, maps the result to the DTO, and returns an `ApiResponse<T>` envelope with `Cache-Control: no-store`.

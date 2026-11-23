@@ -99,12 +99,23 @@ namespace CryptoRiskAnalysis.Tests.Services
             Assert.Equal(0, coinGeckoCalls);
         }
 
-        [Fact]
-        public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceReturnsInvalidJson()
+        [Theory]
+        [InlineData("not-json")]
+        [InlineData("[null]")]
+        [InlineData("stale")]
+        public async Task GetAllMarketDataAsync_FallsBack_WhenBinanceReturnsInvalidHistory(string payload)
         {
+            if (payload == "stale")
+            {
+                var open = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-8), TimeSpan.Zero).ToUnixTimeMilliseconds();
+                payload = JsonSerializer.Serialize(new object[][]
+                {
+                    [open, "100", "110", "90", "100", "10", open + 86_399_999L, "1000"]
+                });
+            }
             var coinGeckoCalls = 0;
             using var binanceClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
-                Task.FromResult(JsonResponse("not-json"))));
+                Task.FromResult(JsonResponse(payload))));
             using var coinGeckoClient = new HttpClient(new StubHttpMessageHandler((_, _) =>
             {
                 coinGeckoCalls++;

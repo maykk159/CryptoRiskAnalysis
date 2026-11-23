@@ -151,7 +151,7 @@ public class CoinGeckoResilienceTests
         var calls = 0;
         await using var provider = CreateProvider(new StubHandler((_, _) =>
         {
-            if (Interlocked.Increment(ref calls) > 1) return Task.FromResult(Success());
+            if (Interlocked.Increment(ref calls) > 1) return Task.FromResult(Success(clock));
             var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
             response.Headers.RetryAfter = new RetryConditionHeaderValue(retryAfter);
             return Task.FromResult(response);
@@ -281,9 +281,10 @@ public class CoinGeckoResilienceTests
         protected override bool TryComputeLength(out long length) { length = 0; return false; }
     }
 
-    private static HttpResponseMessage Success()
+    private static HttpResponseMessage Success(TimeProvider? clock = null)
     {
-        var timestamp = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-1), TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var now = clock?.GetUtcNow() ?? DateTimeOffset.UtcNow;
+        var timestamp = new DateTimeOffset(now.UtcDateTime.Date.AddDays(-1), TimeSpan.Zero).ToUnixTimeMilliseconds();
         return new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = new StringContent(JsonSerializer.Serialize(new

@@ -11,6 +11,9 @@ namespace CryptoRiskAnalysis.Tests.Services;
 
 public sealed class HistoricalMarketDataTests : IDisposable
 {
+    private static readonly DateTimeOffset Now = new(2026, 9, 10, 12, 0, 0, TimeSpan.Zero);
+    private static readonly TimeProvider Clock = Moq.Mock.Of<TimeProvider>(clock => clock.GetUtcNow() == Now);
+
     [Theory]
     [InlineData(MarketDataSource.Binance)]
     [InlineData(MarketDataSource.CoinGecko)]
@@ -24,9 +27,7 @@ public sealed class HistoricalMarketDataTests : IDisposable
             return ProviderResponse(source, points);
         }));
         using var cache = new MemoryCache(new MemoryCacheOptions());
-        ICryptoDataService warmProvider = source == MarketDataSource.Binance
-            ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance)
-            : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance);
+        var warmProvider = CreateProvider(source, client, cache);
         await warmProvider.GetAllMarketDataAsync("bitcoin", 3, Token);
         using var store = new SqliteHistoricalMarketDataStore(_path);
         var result = await CreateService(store, client, cache).GetAsync("bitcoin", source, 3, null, Token);
@@ -47,9 +48,7 @@ public sealed class HistoricalMarketDataTests : IDisposable
         using var client = new HttpClient(new StubHandler(_ => ProviderResponse(source, ++calls == 1 ? original : corrected)));
         using var cache = new MemoryCache(new MemoryCacheOptions());
         using var store = new SqliteHistoricalMarketDataStore(_path);
-        ICryptoDataService provider = source == MarketDataSource.Binance
-            ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, historyStore: store)
-            : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, historyStore: store);
+        var provider = CreateProvider(source, client, cache, store);
 
         await provider.GetAllMarketDataAsync("bitcoin", 7, Token);
         await provider.GetAllMarketDataAsync("bitcoin", 30, Token);
@@ -59,6 +58,81 @@ public sealed class HistoricalMarketDataTests : IDisposable
         Assert.Equal(2, calls);
         Assert.Equal(100m, cached.priceHistory[^1].Price);
         Assert.Equal(corrected, archived);
+    }
+
+    [Theory]
+    [InlineData(MarketDataSource.Binance)]
+    [InlineData(MarketDataSource.CoinGecko)]
+    public async Task StaleConsecutiveSeries_IsRejectedBeforeCachingOrArchiving(MarketDataSource source)
+    {
+        var stale = Enumerable.Range(0, 7).Select(i => Row(Today.AddDays(i - 14))).ToList();
+        var fresh = Enumerable.Range(0, 7).Select(i => Row(Today.AddDays(i - 7))).ToList();
+        var calls = 0;
+        using var client = new HttpClient(new StubHandler(_ => ProviderResponse(source, ++calls == 1 ? stale : fresh)));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        using var store = new SqliteHistoricalMarketDataStore(_path);
+        var provider = CreateProvider(source, client, cache, store);
+
+        var error = await Assert.ThrowsAsync<MarketDataProviderException>(() =>
+            provider.GetAllMarketDataAsync("bitcoin", 7, Token));
+        Assert.Contains($"{Today.AddDays(-8):yyyy-MM-dd}", error.Message);
+        Assert.Empty(await store.ReadAsync("bitcoin", source, stale[0].Date, Today.AddDays(-1), Token));
+        var result = await provider.GetAllMarketDataAsync("bitcoin", 7, Token);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(fresh[^1].Timestamp, result.priceHistory[^1].Timestamp);
+    }
+
+    [Theory]
+    [InlineData(MarketDataSource.Binance)]
+    [InlineData(MarketDataSource.CoinGecko)]
+    public async Task CacheRefreshesWhenLastObservationFallsOutsideProviderWindow(MarketDataSource source)
+    {
+        var now = Now.AddHours(11).AddMinutes(59).AddSeconds(59);
+        var clock = new Moq.Mock<TimeProvider>();
+        clock.Setup(c => c.GetUtcNow()).Returns(() => now);
+        var calls = 0;
+        using var client = new HttpClient(new StubHandler(_ =>
+        {
+            calls++;
+            return ProviderResponse(source, [Row(DateOnly.FromDateTime(now.UtcDateTime).AddDays(-1))]);
+        }));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var provider = CreateProvider(source, client, cache, clock: clock.Object);
+        var beforeMidnight = await provider.GetAllMarketDataAsync("bitcoin", 1, Token);
+        Assert.Equal(Row(Today.AddDays(-1)).Timestamp, Assert.Single(beforeMidnight.priceHistory).Timestamp);
+
+        now = now.AddSeconds(1);
+        if (source == MarketDataSource.CoinGecko)
+        {
+            now = now.AddMinutes(34);
+            Assert.Same(beforeMidnight, await provider.GetAllMarketDataAsync("bitcoin", 1, Token));
+            Assert.Equal(1, calls);
+            now = now.AddMinutes(1);
+        }
+        var refreshed = await provider.GetAllMarketDataAsync("bitcoin", 1, Token);
+
+        Assert.Equal(2, calls);
+        Assert.Equal(Row(Today).Timestamp, Assert.Single(refreshed.priceHistory).Timestamp);
+    }
+
+    [Fact]
+    public async Task CoinGeckoCanFetchAnEarlierCompletedDayDuringItsPublicationWindow()
+    {
+        var now = new DateTimeOffset(Now.UtcDateTime.Date.AddMinutes(15), TimeSpan.Zero);
+        var clock = Moq.Mock.Of<TimeProvider>(c => c.GetUtcNow() == now);
+        var expected = Row(Today.AddDays(-2));
+        using var client = new HttpClient(new StubHandler(request =>
+        {
+            Assert.Contains("days=3", request.RequestUri!.Query);
+            return ProviderResponse(MarketDataSource.CoinGecko, [expected]);
+        }));
+        using var cache = new MemoryCache(new MemoryCacheOptions());
+        var provider = CreateProvider(MarketDataSource.CoinGecko, client, cache, clock: clock);
+
+        var result = await provider.GetAllMarketDataAsync("bitcoin", 1, Token);
+
+        Assert.Equal(expected.Timestamp, Assert.Single(result.priceHistory).Timestamp);
     }
 
     [Fact]
@@ -106,7 +180,7 @@ public sealed class HistoricalMarketDataTests : IDisposable
 
     private readonly string _path = Path.Combine(Path.GetTempPath(), $"crypto-history-{Guid.NewGuid():N}.db");
     private static CancellationToken Token => TestContext.Current.CancellationToken;
-    private static DateOnly Today => DateOnly.FromDateTime(DateTime.UtcNow);
+    private static DateOnly Today => DateOnly.FromDateTime(Now.UtcDateTime);
     private static DailyMarketObservation Row(DateOnly date, decimal price = 100m, decimal volume = 1000m) =>
         new(date, new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero).ToUnixTimeMilliseconds(), price, volume);
 
@@ -278,9 +352,15 @@ public sealed class HistoricalMarketDataTests : IDisposable
     {
         var requestLock = new MarketDataRequestLock();
         return new HistoricalMarketDataService(store,
-            new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, requestLock, store),
-            new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, requestLock, store), requestLock, TimeProvider.System);
+            new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, requestLock, store, Clock),
+            new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, requestLock, store, Clock), requestLock, Clock);
     }
+
+    private static ICryptoDataService CreateProvider(MarketDataSource source, HttpClient client,
+        IMemoryCache cache, IHistoricalMarketDataStore? store = null, TimeProvider? clock = null) =>
+        source == MarketDataSource.Binance
+            ? new BinanceSpotService(client, cache, NullLogger<BinanceSpotService>.Instance, historyStore: store, clock: clock ?? Clock)
+            : new CoinGeckoService(client, cache, NullLogger<CoinGeckoService>.Instance, historyStore: store, clock: clock ?? Clock);
 
     [Theory]
     [InlineData(0, null)]
