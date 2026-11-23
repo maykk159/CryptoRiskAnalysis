@@ -27,11 +27,13 @@ namespace CryptoRiskAnalysis.API.Extensions
                 .ValidateOnStart();
             services.AddSingleton<CoinGeckoRequestBudget>();
             services.AddTransient<CoinGeckoRateLimitHandler>();
+            services.AddTransient<MarketDataResponseBufferingHandler>();
 
             // Retry transient failures and 429 responses up to three times with
             // exponential backoff, with per-attempt and total request timeouts.
-            services.AddHttpClient<BinanceSpotService>()
-                .AddStandardResilienceHandler(ConfigureResilience);
+            var binanceClient = services.AddHttpClient<BinanceSpotService>();
+            binanceClient.AddStandardResilienceHandler(ConfigureResilience);
+            binanceClient.AddHttpMessageHandler<MarketDataResponseBufferingHandler>();
 
             var coinGeckoClient = services.AddHttpClient<CoinGeckoService>(client =>
             {
@@ -39,6 +41,8 @@ namespace CryptoRiskAnalysis.API.Extensions
                 client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
             });
             coinGeckoClient.AddStandardResilienceHandler(ConfigureResilience);
+            coinGeckoClient.AddHttpMessageHandler<MarketDataResponseBufferingHandler>();
+            // The inner rate-limit handler records Retry-After before body buffering starts.
             coinGeckoClient.AddHttpMessageHandler<CoinGeckoRateLimitHandler>();
 
             // Register HybridCryptoDataService as the single implementation of ICryptoDataService

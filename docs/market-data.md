@@ -15,8 +15,8 @@ Permits are not refunded for failures, because the provider may have counted the
 
 The budget is inside the HTTP resilience pipeline. The pipeline explicitly uses
 exponential backoff, jitter, at most three retries, 10-second attempt timeouts and
-a 30-second overall timeout. CoinGecko response body buffering is inside the
-pipeline as well, so a stalled body cannot escape the timeout. Network failures,
+a 30-second overall timeout. Both providers buffer response bodies inside the
+pipeline, so the attempt and overall limits cover stalled downloads. Network failures,
 408, 429 and 5xx responses are retryable; ordinary 4xx and invalid parsed market
 data are not retried. Caller cancellation propagates.
 
@@ -89,10 +89,10 @@ fetches a recent window beginning at the earliest missing date through yesterday
 using the selected provider's existing adapter. It re-reads the database and
 requires the entire requested window to be present before responding.
 
-Provider cache entries retain every daily price and volume. A cache hit also
-upserts these observations for the requested asset ID before returning, so an
-empty archive can be repaired without another HTTP call. Binance aliases sharing
-a symbol (for example `matic-network` and `polygon-ecosystem-token`) share the
+Provider cache entries retain every daily price and volume. A cache hit inserts
+missing observations for the requested asset ID before returning. This fills archive
+gaps without another HTTP call and preserves corrections from newer fetches.
+Binance aliases sharing a symbol (for example `matic-network` and `polygon-ecosystem-token`) share the
 provider cache but each receives its own archive rows. This adds a small SQLite
 batch write on provider cache hits; reads of complete historical windows remain
 read-only.

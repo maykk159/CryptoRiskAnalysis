@@ -57,7 +57,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("Binance Cache HIT for {AssetId} ({Symbol})", assetId, symbol);
-                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
+                await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
                 return cachedData.Data;
             }
 
@@ -65,7 +65,7 @@ namespace CryptoRiskAnalysis.API.Services
             if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null)
             {
                 _logger.LogDebug("Binance Cache HIT after waiting for {AssetId} ({Symbol})", assetId, symbol);
-                await cachedData.PersistAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
+                await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.Binance, cancellationToken);
                 return cachedData.Data;
             }
 

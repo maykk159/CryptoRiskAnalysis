@@ -19,9 +19,6 @@ public sealed class CoinGeckoRateLimitHandler(CoinGeckoRequestBudget budget, Tim
                 if (delay <= TimeSpan.Zero) delay = TimeSpan.FromSeconds(2);
                 budget.Defer(delay);
             }
-            // HttpClient normally buffers after delegating handlers return. Buffer here so
-            // slow response bodies are covered by the attempt and total resilience timeouts.
-            await response.Content.LoadIntoBufferAsync(cancellationToken);
             return response;
         }
         catch
