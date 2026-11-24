@@ -39,6 +39,12 @@ budgets. The incoming per-IP API limiter is separate from this outgoing budget.
 
 ## Persistent daily history
 
+Newly fetched and cached daily windows must end on the expected UTC date.
+Binance requires yesterday. Before 00:35 UTC, CoinGecko can also use the day
+before yesterday while its latest daily data is being published. A complete
+historical window already stored in SQLite can still be read by its dates.
+[CoinGecko daily publication schedule](https://docs.coingecko.com/demo/reference/coins-id-market-chart)
+
 The application uses SQLite through `Microsoft.Data.Sqlite`. No database server
 is required. The database is created on first use at
 `CryptoRiskAnalysis.API/Data/market-history.db`, relative to the API content root.

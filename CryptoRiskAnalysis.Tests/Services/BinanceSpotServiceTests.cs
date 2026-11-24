@@ -12,6 +12,8 @@ namespace CryptoRiskAnalysis.Tests.Services
 {
     public class BinanceSpotServiceTests
     {
+        private static readonly DateTimeOffset Now = new(2024, 1, 18, 12, 0, 0, TimeSpan.Zero);
+        private readonly TimeProvider _clock = Mock.Of<TimeProvider>(clock => clock.GetUtcNow() == Now);
         private readonly Mock<ILogger<BinanceSpotService>> _mockLogger;
         private readonly Mock<IMemoryCache> _mockCache;
         private readonly Mock<HttpMessageHandler> _mockHttpHandler;
@@ -48,7 +50,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             _mockCache.Setup(c => c.CreateEntry(It.IsAny<object>()))
                 .Returns(Mock.Of<ICacheEntry>());
 
-            var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
+            var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object, clock: _clock);
 
             // Act
             var (priceHistory, currentPrice, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
@@ -89,7 +91,7 @@ namespace CryptoRiskAnalysis.Tests.Services
             _mockCache.Setup(c => c.CreateEntry(It.IsAny<object>()))
                 .Returns(Mock.Of<ICacheEntry>());
 
-            var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
+            var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object, clock: _clock);
 
             // Act
             var (priceHistory, currentPrice, currentVolume, averageVolume) = await service.GetAllMarketDataAsync(
@@ -148,22 +150,23 @@ namespace CryptoRiskAnalysis.Tests.Services
         public async Task GetAllMarketDataAsync_UsesCache_WhenDataAvailable()
         {
             // Arrange
+            var timestamp = Now.AddDays(-1).ToUnixTimeMilliseconds();
             var cachedData = (
-                priceHistory: new List<API.Models.PriceData> { new API.Models.PriceData { Timestamp = 1000, Price = 100m } },
+                priceHistory: new List<API.Models.PriceData> { new API.Models.PriceData { Timestamp = timestamp, Price = 100m } },
                 currentPrice: 105m,
                 currentVolume: 1000m,
                 avgVolume: 900m
             );
 
-            object? cacheValue = new API.Models.CachedMarketData(cachedData, []);
+            object? cacheValue = API.Models.CachedMarketData.Create(cachedData, [(timestamp, cachedData.currentVolume)]);
             _mockCache.Setup(c => c.TryGetValue(It.IsAny<object>(), out cacheValue))
                 .Returns(true);
 
-            var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object);
+            var service = new BinanceSpotService(_httpClient, _mockCache.Object, _mockLogger.Object, clock: _clock);
 
             // Act
             var result = await service.GetAllMarketDataAsync(
-                "bitcoin", 30, TestContext.Current.CancellationToken);
+                "bitcoin", 1, TestContext.Current.CancellationToken);
 
             // Assert
             Assert.Equal(cachedData.priceHistory, result.priceHistory);
@@ -199,7 +202,7 @@ namespace CryptoRiskAnalysis.Tests.Services
                 .ReturnsAsync(mockResponse);
 
             using var cache = new MemoryCache(new MemoryCacheOptions());
-            var service = new BinanceSpotService(_httpClient, cache, _mockLogger.Object);
+            var service = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, clock: _clock);
 
             var (priceHistory, currentPrice, currentVolume, avgVolume) = await service.GetAllMarketDataAsync(
                 "bitcoin", 2, TestContext.Current.CancellationToken);
@@ -285,8 +288,8 @@ namespace CryptoRiskAnalysis.Tests.Services
 
             using var cache = new MemoryCache(new MemoryCacheOptions());
             var requestLock = new MarketDataRequestLock();
-            var firstService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock);
-            var secondService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock);
+            var firstService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock, clock: _clock);
+            var secondService = new BinanceSpotService(_httpClient, cache, _mockLogger.Object, requestLock, clock: _clock);
 
             var firstRequest = firstService.GetAllMarketDataAsync(
                 "bitcoin", 3, deadline.Token);
@@ -332,12 +335,12 @@ namespace CryptoRiskAnalysis.Tests.Services
 
         private static string GetMockBinanceResponseWithOpenCandle()
         {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+            var today = new DateTimeOffset(Now.UtcDateTime.Date, TimeSpan.Zero).ToUnixTimeMilliseconds();
             var klines = new object[][]
             {
-                new object[] { now - 172_800_000, "100", "110", "90", "100", "1000", now - 86_400_001, "100000" },
-                new object[] { now - 86_400_000, "200", "210", "190", "200", "2000", now - 1, "400000" },
-                new object[] { now, "300", "310", "290", "300", "3000", now + 86_399_999, "900000" }
+                new object[] { today - 172_800_000, "100", "110", "90", "100", "1000", today - 86_400_001, "100000" },
+                new object[] { today - 86_400_000, "200", "210", "190", "200", "2000", today - 1, "400000" },
+                new object[] { today, "300", "310", "290", "300", "3000", today + 86_399_999, "900000" }
             };
 
             return JsonSerializer.Serialize(klines);

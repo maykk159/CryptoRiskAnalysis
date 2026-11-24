@@ -1,25 +1,104 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using CryptoRiskAnalysis.API.Controllers;
 using CryptoRiskAnalysis.API.Extensions;
+using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Middleware;
 using CryptoRiskAnalysis.API.Services;
 using CryptoRiskAnalysis.API.Wrappers;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.OpenApi.Models;
 using Moq;
+using Swashbuckle.AspNetCore.Swagger;
 
 namespace CryptoRiskAnalysis.Tests.Integration;
 
 public class ApiPipelineTests
 {
+    [Theory]
+    [InlineData("/api/RiskAnalysis/bitcoin", "?days=abc", "days")]
+    [InlineData("/api/RiskAnalysis/bitcoin", "?refresh=maybe", "refresh")]
+    [InlineData("/api/RiskAnalysis/bitcoin", "?days=8", null)]
+    [InlineData("/api/marketdata/bitcoin/history", "?endDate=abc", "endDate")]
+    [InlineData("/api/marketdata/bitcoin/history", "?days=91", null)]
+    public async Task InvalidQueryArguments_UseDocumentedBadRequestFormat(string path, string search, string? invalidField)
+    {
+        await using var host = CreateValidationHost();
+        var application = new ApplicationBuilder(host.Services);
+        application.UseRouting();
+        application.UseRateLimiter();
+        application.UseEndpoints(endpoints => endpoints.MapControllers());
+        await using var scope = host.Services.CreateAsyncScope();
+        var context = CreateHttpContext(scope.ServiceProvider);
+        context.Request.Method = HttpMethods.Get;
+        context.Request.Path = path;
+        context.Request.QueryString = new QueryString(search);
+        context.Request.Headers.Accept = "application/json";
+        context.RequestAborted = TestContext.Current.CancellationToken;
+
+        await application.Build()(context);
+
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        using var document = await JsonDocument.ParseAsync(context.Response.Body, cancellationToken: context.RequestAborted);
+        var body = document.RootElement;
+        if (invalidField is not null)
+        {
+            Assert.StartsWith("application/problem+json", context.Response.ContentType);
+            Assert.Equal(400, body.GetProperty("status").GetInt32());
+            Assert.NotEmpty(body.GetProperty("errors").GetProperty(invalidField).EnumerateArray());
+        }
+        else
+        {
+            Assert.StartsWith("application/json", context.Response.ContentType);
+            Assert.False(body.GetProperty("succeeded").GetBoolean());
+            Assert.False(string.IsNullOrWhiteSpace(body.GetProperty("message").GetString()));
+        }
+    }
+
+    [Fact]
+    public async Task SwaggerDocumentsBothBadRequestSchemasForEachEndpoint()
+    {
+        await using var host = CreateValidationHost();
+        var swagger = host.Services.GetRequiredService<ISwaggerProvider>().GetSwagger("v1");
+        foreach (var path in new[] { "/api/RiskAnalysis/{assetId}", "/api/marketdata/{assetId}/history" })
+        {
+            var responses = swagger.Paths[path].Operations[OperationType.Get].Responses;
+            var successSchema = responses["200"].Content["application/json"].Schema.Reference.Id;
+            var badRequest = responses["400"].Content;
+            Assert.Contains("succeeded", swagger.Components.Schemas[successSchema].Properties.Keys);
+            Assert.Equal(successSchema, badRequest["application/json"].Schema.Reference.Id);
+            Assert.Equal(nameof(ValidationProblemDetails), badRequest["application/problem+json"].Schema.Reference.Id);
+        }
+    }
+
+    private static WebApplication CreateValidationHost()
+    {
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            ApplicationName = typeof(RiskAnalysisController).Assembly.GetName().Name
+        });
+        builder.Logging.ClearProviders();
+        builder.Services.AddControllers();
+        builder.Services.AddApplicationServices();
+        builder.Services.AddSingleton(new Mock<ICryptoDataService>(MockBehavior.Strict).Object);
+        builder.Services.AddSingleton(new Mock<IHistoricalMarketDataStore>(MockBehavior.Strict).Object);
+        builder.Services.AddScoped<HistoricalMarketDataService>();
+        builder.Services.AddApiDocumentation();
+        return builder.Build();
+    }
+
     private static CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService CreateQuotes()
     {
         var quotes = new Mock<CryptoRiskAnalysis.API.Interfaces.ICurrentQuoteService>();
@@ -136,7 +215,7 @@ public class ApiPipelineTests
     }
 
     [Fact]
-    public async Task RateLimitMiddleware_ThirtyFirstRequestUsesJsonEnvelope()
+    public async Task RateLimitMiddleware_ThirtyFirstRequestUsesJsonEnvelopeAndRetryAfter()
     {
         var services = new ServiceCollection();
         services.AddLogging();
@@ -163,6 +242,8 @@ public class ApiPipelineTests
         var payload = await ReadResponseAsync(rejectedContext);
 
         Assert.Equal(StatusCodes.Status429TooManyRequests, rejectedContext.Response.StatusCode);
+        Assert.True(int.TryParse(rejectedContext.Response.Headers.RetryAfter, out var retryAfterSeconds));
+        Assert.InRange(retryAfterSeconds, 1, 60);
         Assert.False(payload.Succeeded);
         Assert.Contains("Too many requests", payload.Message);
     }

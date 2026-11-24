@@ -19,7 +19,7 @@ export interface RiskAnalysisResponse {
     currency: string;
     fetchedAt: string;
     sourceUpdatedAt: string | null;
-  };
+  } | null;
   compositeRiskScore: number;
   volatilityScore: number;
   trendScore: number;
@@ -47,7 +47,7 @@ export interface RiskAnalysisResponse {
     trendContribution: number;
     volumeContribution: number;
     warnings: string[];
-  };
+  } | null;
 }
 
 export interface ApiResponse<T> {

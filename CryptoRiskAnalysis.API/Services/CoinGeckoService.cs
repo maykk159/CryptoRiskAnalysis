@@ -14,6 +14,7 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly ILogger<CoinGeckoService> _logger;
         private readonly MarketDataRequestLock _requestLock;
         private readonly IHistoricalMarketDataStore? _historyStore;
+        private readonly TimeProvider _clock;
         internal Task<MarketQuote> GetCurrentQuoteAsync(string assetId, TimeProvider clock, CancellationToken cancellationToken) =>
             MarketQuoteReader.ReadAsync(_httpClient, assetId, MarketDataSource.CoinGecko, clock, cancellationToken);
 
@@ -28,13 +29,15 @@ namespace CryptoRiskAnalysis.API.Services
             IMemoryCache cache,
             ILogger<CoinGeckoService> logger,
             MarketDataRequestLock? requestLock = null,
-            IHistoricalMarketDataStore? historyStore = null)
+            IHistoricalMarketDataStore? historyStore = null,
+            TimeProvider? clock = null)
         {
             _httpClient = httpClient;
             _cache = cache;
             _logger = logger;
             _requestLock = requestLock ?? new MarketDataRequestLock();
             _historyStore = historyStore;
+            _clock = clock ?? TimeProvider.System;
         }
 
         /// <summary>
@@ -54,7 +57,8 @@ namespace CryptoRiskAnalysis.API.Services
             string cacheKey = $"market_data_{assetId}_{days}";
 
             // Check cache first
-            if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null)
+            if (_cache.TryGetValue(cacheKey, out CachedMarketData? cachedData) && cachedData is not null &&
+                MarketDataValidator.HasFreshEndDate(cachedData, _clock.GetUtcNow()))
             {
                 _logger.LogDebug("CoinGecko Cache HIT for {AssetId}", assetId);
                 await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
@@ -62,7 +66,8 @@ namespace CryptoRiskAnalysis.API.Services
             }
 
             using var requestLease = await _requestLock.AcquireAsync(cacheKey, cancellationToken);
-            if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null)
+            if (_cache.TryGetValue(cacheKey, out cachedData) && cachedData is not null &&
+                MarketDataValidator.HasFreshEndDate(cachedData, _clock.GetUtcNow()))
             {
                 _logger.LogDebug("CoinGecko Cache HIT after waiting for {AssetId}", assetId);
                 await cachedData.PersistMissingAsync(_historyStore, assetId, MarketDataSource.CoinGecko, cancellationToken);
@@ -81,8 +86,8 @@ namespace CryptoRiskAnalysis.API.Services
         private async Task<HttpResponseMessage> FetchResponseAsync(
             string assetId, int days, CancellationToken cancellationToken)
         {
-            // Request one extra day because CoinGecko may include today's still-open UTC candle.
-            var providerDays = days + 1;
+            // Allow for today's still-open point and for the publication delay after midnight.
+            var providerDays = days + (MarketDataValidator.IsCoinGeckoPublicationWindow(_clock.GetUtcNow()) ? 2 : 1);
             try
             {
                 return await _httpClient.GetAsync(
@@ -106,12 +111,12 @@ namespace CryptoRiskAnalysis.API.Services
                 throw new MarketDataProviderException("CoinGecko", response.StatusCode);
         }
 
-        private static async Task<CachedMarketData> ReadMarketDataAsync(
+        private async Task<CachedMarketData> ReadMarketDataAsync(
             HttpResponseMessage response, int days, CancellationToken cancellationToken)
         {
             var content = await response.Content.ReadAsStringAsync(cancellationToken);
             var (prices, volumes) = DeserializeMarketChart(content);
-            return BuildDailyMarketData(prices, volumes, days);
+            return BuildDailyMarketData(prices, volumes, days, _clock.GetUtcNow());
         }
 
         private static (List<List<decimal>> Prices, List<List<decimal>> Volumes) DeserializeMarketChart(string content)
@@ -134,15 +139,15 @@ namespace CryptoRiskAnalysis.API.Services
         }
 
         private static CachedMarketData BuildDailyMarketData(
-            List<List<decimal>> prices, List<List<decimal>> volumes, int days)
+            List<List<decimal>> prices, List<List<decimal>> volumes, int days, DateTimeOffset now)
         {
-            var currentPrice = ReadCurrentPrice(prices);
-            // CoinGecko can append a live intraday point even when daily granularity is
-            // requested. Keep UTC-midnight daily points and completed previous days only.
-            var normalizedPrices = NormalizeCompletedDailyValues(prices, MarketField.Price)
+            var currentPrice = ReadCurrentPrice(prices, now.ToUnixTimeMilliseconds());
+            var todayUtc = now.UtcDateTime.Date;
+            // CoinGecko can append a live point. Only use dates before today for history.
+            var normalizedPrices = NormalizeCompletedDailyValues(prices, MarketField.Price, todayUtc)
                 .TakeLast(days)
                 .ToList();
-            var normalizedVolumes = NormalizeCompletedDailyValues(volumes, MarketField.Volume)
+            var normalizedVolumes = NormalizeCompletedDailyValues(volumes, MarketField.Volume, todayUtc)
                 .TakeLast(days)
                 .ToList();
 
@@ -163,7 +168,7 @@ namespace CryptoRiskAnalysis.API.Services
             var avgVolume = volumeHistory.Average(point => point.Volume);
 
             var result = new MarketDataSnapshot(priceHistory, currentPrice, currentVolume, avgVolume, MarketDataSource.CoinGecko);
-            return CachedMarketData.Create(result, volumeHistory);
+            return MarketDataValidator.RequireFreshEndDate(CachedMarketData.Create(result, volumeHistory), now);
         }
 
         private async Task PersistAndCacheAsync(string cacheKey, string assetId,
@@ -179,9 +184,8 @@ namespace CryptoRiskAnalysis.API.Services
                 cacheEntry.Data.priceHistory.Count, assetId, CacheDurationSeconds);
         }
 
-        private static decimal ReadCurrentPrice(IEnumerable<List<decimal>> values)
+        private static decimal ReadCurrentPrice(IEnumerable<List<decimal>> values, long nowUnixMilliseconds)
         {
-            var nowUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
             var latestValue = values
                 .Where(value => value is { Count: >= 2 } &&
                                 value[0] <= nowUnixMilliseconds)
@@ -214,10 +218,9 @@ namespace CryptoRiskAnalysis.API.Services
 
         private static IEnumerable<DailyValue> NormalizeCompletedDailyValues(
             IEnumerable<List<decimal>> values,
-            MarketField field)
+            MarketField field, DateTime todayUtc)
         {
             var fieldName = field.ToString().ToLowerInvariant(); // used only in error messages
-            var todayUtc = DateTime.UtcNow.Date;
             var parsedValues = new List<DailyValue>();
 
             foreach (var value in values)

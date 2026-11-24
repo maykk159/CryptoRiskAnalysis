@@ -82,6 +82,7 @@ public class ServiceCollectionExtensionsTests
         Assert.True(policy.IsOriginAllowed("https://risk.example.com"));
         Assert.False(policy.IsOriginAllowed("http://localhost:5173"));
         Assert.False(policy.IsOriginAllowed("https://untrusted.example.com"));
+        Assert.Contains("Retry-After", policy.ExposedHeaders);
     }
 
     [Fact]
@@ -93,7 +94,7 @@ public class ServiceCollectionExtensionsTests
         await using var provider = services.BuildServiceProvider();
         var options = provider.GetRequiredService<IOptions<RateLimiterOptions>>().Value;
 
-        var httpContext = new DefaultHttpContext();
+        var httpContext = new DefaultHttpContext { RequestServices = provider };
         httpContext.Response.Body = new MemoryStream();
 
         using var limiter = new ConcurrencyLimiter(new ConcurrencyLimiterOptions
@@ -225,8 +226,8 @@ public class ServiceCollectionExtensionsTests
 
     private static string CreateBinancePayload()
     {
-        var closeTime = DateTimeOffset.UtcNow.AddMinutes(-1).ToUnixTimeMilliseconds();
-        var openTime = closeTime - (long)TimeSpan.FromDays(1).TotalMilliseconds;
+        var openTime = new DateTimeOffset(DateTime.UtcNow.Date.AddDays(-1), TimeSpan.Zero).ToUnixTimeMilliseconds();
+        var closeTime = openTime + 86_399_999L;
         return JsonSerializer.Serialize(new object[][]
         {
             new object[] { openTime, "100", "110", "90", "105", "1000", closeTime, "105000" }

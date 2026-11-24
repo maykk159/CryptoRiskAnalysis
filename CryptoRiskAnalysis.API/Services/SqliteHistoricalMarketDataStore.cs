@@ -32,6 +32,22 @@ public sealed class SqliteHistoricalMarketDataStore : IHistoricalMarketDataStore
         IReadOnlyList<DailyMarketObservation> observations, CancellationToken cancellationToken) =>
         WriteAsync(assetId, source, observations, overwriteExisting: false, cancellationToken);
 
+    public async Task CheckAccessAsync(CancellationToken cancellationToken)
+    {
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            using var connection = Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT asset_id, source, quote_currency, utc_day, timestamp_ms, price, volume
+                FROM daily_market_data LIMIT 0;
+                """;
+            command.ExecuteNonQuery();
+        }
+        finally { _gate.Release(); }
+    }
+
     private async Task WriteAsync(string assetId, MarketDataSource source,
         IReadOnlyList<DailyMarketObservation> observations, bool overwriteExisting, CancellationToken cancellationToken)
     {

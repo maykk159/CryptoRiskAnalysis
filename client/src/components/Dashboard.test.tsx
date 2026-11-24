@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import {
+  focusManager,
+  onlineManager,
+  QueryClient,
+  QueryClientProvider,
+} from '@tanstack/react-query';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getRiskAnalysis } from '../services/api';
+import { ApiRequestError, getRiskAnalysis } from '../services/api';
 import type { RiskAnalysisResponse } from '../types';
 import { Dashboard } from './Dashboard';
 
@@ -58,6 +63,12 @@ function renderDashboard() {
   };
 }
 
+async function advanceTime(milliseconds: number) {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(milliseconds);
+  });
+}
+
 beforeEach(() => {
   window.history.replaceState(null, '', '/');
   vi.stubGlobal(
@@ -69,6 +80,9 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   clients.splice(0).forEach(client => client.clear());
+  focusManager.setFocused(undefined);
+  onlineManager.setOnline(true);
+  vi.useRealTimers();
   getAnalysis.mockReset();
   window.history.replaceState(null, '', '/');
   vi.unstubAllGlobals();
@@ -152,6 +166,72 @@ describe('Dashboard loading and recovery', () => {
     expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
   });
 
+  it('holds automatic and manual retries until Retry-After while keeping the existing data', async () => {
+    vi.useFakeTimers();
+    focusManager.setFocused(true);
+    let retryAt = 0;
+    getAnalysis
+      .mockResolvedValueOnce(analysis)
+      .mockImplementationOnce(async () => {
+        retryAt = Date.now() + 60_000;
+        throw new ApiRequestError('Rate limited', 429, retryAt);
+      })
+      .mockResolvedValue(analysis);
+    renderDashboard();
+    await advanceTime(1);
+    expect(screen.getByRole('heading', { name: 'Risk overview' })).toBeTruthy();
+
+    await advanceTime(10_000);
+    expect(getAnalysis).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('timer').textContent).toBe('Retry in 60 seconds.');
+    expect(screen.getByRole('heading', { name: 'Risk overview' })).toBeTruthy();
+
+    const refresh = screen.getByRole<HTMLButtonElement>('button', { name: 'Refresh' });
+    const retry = screen.getByRole<HTMLButtonElement>('button', { name: 'Try again' });
+    expect(refresh.disabled).toBe(true);
+    expect(retry.disabled).toBe(true);
+    fireEvent.click(refresh);
+    fireEvent.click(retry);
+
+    await act(async () => {
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+    await advanceTime(retryAt - Date.now() - 1);
+    expect(getAnalysis).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole('timer').textContent).toBe('Retry in 1 second.');
+
+    await advanceTime(1);
+    expect(getAnalysis).toHaveBeenCalledTimes(3);
+    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 30, expect.any(AbortSignal));
+    await advanceTime(10_001);
+    expect(getAnalysis).toHaveBeenCalledTimes(4);
+    expect(screen.queryByRole('timer')).toBeNull();
+  });
+
+  it('keeps the cooldown with its selection when changing periods', async () => {
+    vi.useFakeTimers();
+    focusManager.setFocused(true);
+    getAnalysis
+      .mockRejectedValueOnce(new ApiRequestError('Rate limited', 429, Date.now() + 60_000))
+      .mockResolvedValue(analysis);
+    renderDashboard();
+    await advanceTime(1);
+    expect(screen.getByRole('timer')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: '7 Days' }));
+    await advanceTime(1);
+    expect(getAnalysis).toHaveBeenLastCalledWith('bitcoin', 7, expect.any(AbortSignal));
+    expect(screen.queryByRole('timer')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: '30 Days' }));
+    await advanceTime(1);
+    expect(screen.getByRole('timer')).toBeTruthy();
+    expect(getAnalysis).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the existing cards mounted during a background refresh', async () => {
     const refresh = deferredAnalysis();
     getAnalysis.mockResolvedValueOnce(analysis).mockReturnValueOnce(refresh.promise);
@@ -174,6 +254,27 @@ describe('Dashboard loading and recovery', () => {
     expect(screen.getByRole('heading', { name: 'Advanced Metrics' })).toBe(metricsHeading);
     expect(screen.queryByText('12.34%')).toBeNull();
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+  });
+
+  it('keeps the last analysis when a successful HTTP refresh returns invalid data', async () => {
+    const api = await vi.importActual<typeof import('../services/api')>('../services/api');
+    getAnalysis.mockImplementation(api.getRiskAnalysis);
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ succeeded: true, data: analysis }))
+      .mockResolvedValueOnce(Response.json({ succeeded: true, data: {} }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { client } = renderDashboard();
+    const metricsHeading = await screen.findByRole('heading', { name: 'Advanced Metrics' });
+
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['risk', 'bitcoin', 30] });
+    });
+
+    expect(await screen.findByText(/The server returned invalid risk analysis data/)).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Advanced Metrics' })).toBe(metricsHeading);
+    expect(client.getQueryData(['risk', 'bitcoin', 30])).toEqual(analysis);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it('retains the last successful data after a failed refresh and retries the selected query', async () => {
@@ -370,7 +471,6 @@ describe('Dashboard URL state and deep linking', () => {
 
   it('preserves an unknown asset from the URL and displays the error without falling back to bitcoin', async () => {
     window.history.replaceState(null, '', '/?asset=unsupportedcoin&days=30');
-    const { ApiRequestError } = await import('../services/api');
     getAnalysis.mockRejectedValueOnce(
       new ApiRequestError(
         'Crypto asset "unsupportedcoin" not found. Please select a different asset.',

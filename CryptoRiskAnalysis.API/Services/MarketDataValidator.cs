@@ -5,6 +5,27 @@ namespace CryptoRiskAnalysis.API.Services;
 
 internal static class MarketDataValidator
 {
+    // CoinGecko publishes the latest completed UTC day at 00:35 UTC.
+    public static bool IsCoinGeckoPublicationWindow(DateTimeOffset now) =>
+        now.UtcDateTime.TimeOfDay < TimeSpan.FromMinutes(35);
+
+    public static bool HasFreshEndDate(CachedMarketData data, DateTimeOffset now)
+    {
+        var yesterday = DateOnly.FromDateTime(now.UtcDateTime).AddDays(-1);
+        var lastDay = data.Observations[^1].Date;
+        return lastDay == yesterday ||
+            (data.Data.Source == MarketDataSource.CoinGecko && IsCoinGeckoPublicationWindow(now) &&
+             lastDay == yesterday.AddDays(-1));
+    }
+
+    public static CachedMarketData RequireFreshEndDate(CachedMarketData data, DateTimeOffset now)
+    {
+        if (!HasFreshEndDate(data, now))
+            throw new MarketDataProviderException(data.Data.Source.ToString(),
+                $"daily observations end on {data.Observations[^1].Date:yyyy-MM-dd}, outside the expected recent UTC dates.");
+        return data;
+    }
+
     public static void ValidateCompletedDailySeries(
         string provider,
         IReadOnlyList<PriceData> prices,

@@ -29,6 +29,8 @@ namespace CryptoRiskAnalysis.API.Controllers
         }
 
         [HttpGet("{assetId}")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<RiskAnalysisResponseDto>), StatusCodes.Status400BadRequest, "application/json")]
         public async Task<ActionResult<ApiResponse<RiskAnalysisResponseDto>>> GetRiskAnalysis(
             string assetId,
             [FromQuery] int days = 30,

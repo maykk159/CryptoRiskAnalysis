@@ -1,4 +1,6 @@
+using CryptoRiskAnalysis.API.Diagnostics;
 using CryptoRiskAnalysis.API.Interfaces;
+using CryptoRiskAnalysis.API.Models;
 using CryptoRiskAnalysis.API.Services;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Http.Resilience;
@@ -17,6 +19,13 @@ namespace CryptoRiskAnalysis.API.Extensions
                 configureResilience?.Invoke(options);
             }
 
+            void ConfigureProviderClient(IHttpClientBuilder client, MarketDataSource source)
+            {
+                client.AddStandardResilienceHandler(ConfigureResilience);
+                client.AddHttpMessageHandler(provider =>
+                    new MarketDataResponseBufferingHandler(source, provider.GetRequiredService<MarketDataMetrics>()));
+            }
+
             // Add Memory Cache
             services.AddMemoryCache();
             services.AddSingleton<MarketDataRequestLock>();
@@ -27,21 +36,17 @@ namespace CryptoRiskAnalysis.API.Extensions
                 .ValidateOnStart();
             services.AddSingleton<CoinGeckoRequestBudget>();
             services.AddTransient<CoinGeckoRateLimitHandler>();
-            services.AddTransient<MarketDataResponseBufferingHandler>();
 
             // Retry transient failures and 429 responses up to three times with
             // exponential backoff, with per-attempt and total request timeouts.
-            var binanceClient = services.AddHttpClient<BinanceSpotService>();
-            binanceClient.AddStandardResilienceHandler(ConfigureResilience);
-            binanceClient.AddHttpMessageHandler<MarketDataResponseBufferingHandler>();
+            ConfigureProviderClient(services.AddHttpClient<BinanceSpotService>(), MarketDataSource.Binance);
 
             var coinGeckoClient = services.AddHttpClient<CoinGeckoService>(client =>
             {
                 client.DefaultRequestHeaders.UserAgent.ParseAdd("CryptoRiskAnalysis/1.0");
                 client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
             });
-            coinGeckoClient.AddStandardResilienceHandler(ConfigureResilience);
-            coinGeckoClient.AddHttpMessageHandler<MarketDataResponseBufferingHandler>();
+            ConfigureProviderClient(coinGeckoClient, MarketDataSource.CoinGecko);
             // The inner rate-limit handler records Retry-After before body buffering starts.
             coinGeckoClient.AddHttpMessageHandler<CoinGeckoRateLimitHandler>();
 
