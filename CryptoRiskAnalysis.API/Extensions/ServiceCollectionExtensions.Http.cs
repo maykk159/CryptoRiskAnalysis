@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Net.Http.Headers;
 using System.Net;
 
 namespace CryptoRiskAnalysis.API.Extensions
@@ -75,7 +76,8 @@ namespace CryptoRiskAnalysis.API.Extensions
                 options.AddPolicy("AllowReactApp",
                     builder => builder.WithOrigins(origins)
                                       .AllowAnyMethod()
-                                      .AllowAnyHeader());
+                                      .AllowAnyHeader()
+                                      .WithExposedHeaders(HeaderNames.RetryAfter));
             });
 
             return services;

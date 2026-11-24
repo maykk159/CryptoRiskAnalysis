@@ -120,6 +120,11 @@ The following abbreviated JSON illustrates the envelope and metric fields. It om
 
 The [response DTO](../CryptoRiskAnalysis.API/DTOs/RiskAnalysisResponseDto.cs) and development Swagger UI describe the full response. Live results depend on the asset, window, provider, and request time.
 
+The web client validates successful response data before updating the dashboard.
+It requires the selected asset, the risk metrics, and usable price history.
+Older responses may omit quote or methodology metadata, and Sharpe may be null.
+An invalid refresh leaves the last valid analysis for that selection visible.
+
 ### Historical observations
 
 ```http
@@ -144,13 +149,20 @@ This endpoint reads persisted observations and backfills missing recent dates. I
 
 Application-generated failures use the same envelope with `succeeded: false`. Production responses hide internal exception details.
 
+Both endpoints document two `400` response types in Swagger. A query value that
+cannot be bound, such as `days=abc`, produces `application/problem+json` with
+messages grouped by parameter in `errors`. A value rejected by an endpoint rule,
+such as `days=8` for risk analysis, produces the `application/json` envelope with
+`succeeded: false` and a `message`. The dashboard displays the field messages or
+the envelope message as appropriate.
+
 ## Reliability and configuration
 
 The provider HTTP pipelines use exponential backoff with jitter and up to three retries for transient network failures, 408, 429, and 5xx responses. Each attempt has a 10-second timeout and each pipeline has a 30-second total timeout. Circuit breaking uses a 50% failure ratio, at least five outcomes within 30 seconds, and a 30-second break duration. These are configuration rules, not measured latency or availability guarantees.
 
 CoinGecko has a shared, configurable outgoing budget, defaulting to 20 attempts per rolling minute per application instance, and honors `Retry-After`. This application budget is distinct from any provider plan allowance. Provider limits can depend on plan, IP, and endpoint weight. See [budget and cooldown behavior](market-data.md#coingecko-request-budget).
 
-The incoming API policy allows 30 requests per fixed one-minute window per resolved client IP, with no request queue. Rejections use a JSON envelope. Behind a reverse proxy, list trusted addresses or CIDR ranges so rate limiting uses the originating client IP; forwarded headers from untrusted remote sources are ignored.
+The incoming API policy allows 30 requests per fixed one-minute window per resolved client IP, with no request queue. Rejections use a JSON envelope and a `Retry-After` header when the limiter can estimate the wait. The CORS policy exposes `Retry-After` to allowed origins. The dashboard shows a countdown and pauses manual and automatic retries for the selected query until that time. Behind a reverse proxy, list trusted addresses or CIDR ranges so rate limiting uses the originating client IP; forwarded headers from untrusted remote sources are ignored.
 
 ```json
 "ReverseProxy": {
@@ -180,6 +192,32 @@ Before public deployment, configure TLS at Kestrel or a trusted reverse proxy, t
 - `Microsoft.Data.Sqlite` supplies persistent daily history.
 - `Serilog.AspNetCore` supplies console and rolling-file logging.
 - `Swashbuckle.AspNetCore` supplies development OpenAPI/Swagger UI.
+
+## Health and diagnostics
+
+| Endpoint | Check |
+|---|---|
+| `GET /health/live` | The API process responds with `200 Healthy`. |
+| `GET /health/ready` | The SQLite archive can be opened and its expected columns can be queried. The first check can initialize a new archive. An inaccessible archive returns `503 Unhealthy`. |
+
+Both health endpoints use local checks. HTTP completion logs include the route
+template, status, duration, and trace ID. Look for provider errors and fallback
+events in the Serilog console or rolling file output.
+
+The `CryptoRiskAnalysis.MarketData` meter exposes the following instruments.
+
+| Instrument | Meaning |
+|---|---|
+| `market_data.provider.request.duration` | Histogram in seconds per provider attempt, including body buffering. Tag `provider` identifies Binance or CoinGecko. |
+| `market_data.rate_limit.rejections` | Counter with `scope` values `api`, `provider`, and `provider_budget`. Provider and budget events also carry the `provider` tag. |
+| `market_data.fallbacks` | Counter when a Binance failure sends the request to CoinGecko. Tags `from_provider` and `to_provider` identify the transition. |
+
+Use [dotnet-counters](https://learn.microsoft.com/en-us/dotnet/core/diagnostics/dotnet-counters)
+to monitor the running API process. Substitute its process ID for `1234`.
+
+```powershell
+dotnet-counters monitor --process-id 1234 --counters CryptoRiskAnalysis.MarketData
+```
 
 ## Verification
 

@@ -1,8 +1,10 @@
+using System.Diagnostics;
 using CryptoRiskAnalysis.API.Extensions;
 using CryptoRiskAnalysis.API.Middleware;
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Services;
 using Serilog;
+using Serilog.Events;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,14 +24,13 @@ builder.Services.AddSingleton<IHistoricalMarketDataStore>(_ =>
     new SqliteHistoricalMarketDataStore(Path.GetFullPath(
         builder.Configuration["HistoricalData:DatabasePath"] ?? "Data/market-history.db", builder.Environment.ContentRootPath)));
 builder.Services.AddScoped<HistoricalMarketDataService>();
+builder.Services.AddOperationalHealthChecks();
 builder.Services.AddForwardedHeadersConfiguration(builder.Configuration);
 
 // Configure CORS
 builder.Services.AddCorsConfiguration(builder.Configuration);
 
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddApiDocumentation();
 
 // Direct production deployments must never serve API responses over plain HTTP.
 // The HTTPS endpoint/certificate can still be supplied by Kestrel configuration.
@@ -42,6 +43,19 @@ var app = builder.Build();
 // Only proxies/networks explicitly trusted in configuration (plus loopback defaults)
 // are allowed to supply these values.
 app.UseForwardedHeaders();
+
+app.UseSerilogRequestLogging(options =>
+{
+    options.MessageTemplate = "HTTP {RequestMethod} {Route} responded {StatusCode} in {Elapsed:0.0} ms (trace {TraceId})";
+    options.GetMessageTemplateProperties = (context, _, elapsed, statusCode) =>
+    [
+        new("RequestMethod", new ScalarValue(context.Request.Method)),
+        new("Route", new ScalarValue((context.GetEndpoint() as RouteEndpoint)?.RoutePattern.RawText ?? "(unmatched)")),
+        new("StatusCode", new ScalarValue(statusCode)),
+        new("Elapsed", new ScalarValue(elapsed)),
+        new("TraceId", new ScalarValue(Activity.Current?.TraceId.ToString() ?? context.TraceIdentifier))
+    ];
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -65,5 +79,6 @@ app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapOperationalHealthChecks();
 
 app.Run();

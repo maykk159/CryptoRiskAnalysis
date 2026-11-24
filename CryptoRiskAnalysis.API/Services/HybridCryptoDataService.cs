@@ -1,3 +1,4 @@
+using CryptoRiskAnalysis.API.Diagnostics;
 using CryptoRiskAnalysis.API.Interfaces;
 using CryptoRiskAnalysis.API.Models;
 using CryptoRiskAnalysis.API.Exceptions;
@@ -16,15 +17,18 @@ namespace CryptoRiskAnalysis.API.Services
         private readonly BinanceSpotService _binanceService;
         private readonly CoinGeckoService _coinGeckoService;
         private readonly ILogger<HybridCryptoDataService> _logger;
+        private readonly MarketDataMetrics? _metrics;
 
         public HybridCryptoDataService(
             BinanceSpotService binanceService,
             CoinGeckoService coinGeckoService,
-            ILogger<HybridCryptoDataService> logger)
+            ILogger<HybridCryptoDataService> logger,
+            MarketDataMetrics? metrics = null)
         {
             _binanceService = binanceService;
             _coinGeckoService = coinGeckoService;
             _logger = logger;
+            _metrics = metrics;
         }
 
         /// <summary>
@@ -56,6 +60,7 @@ namespace CryptoRiskAnalysis.API.Services
                                                or BrokenCircuitException)
                 {
                     _logger.LogWarning(ex, "Binance failed for {AssetId}, falling back to CoinGecko", assetId);
+                    _metrics?.RecordBinanceFallback();
                 }
             }
             else

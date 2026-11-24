@@ -13,6 +13,8 @@ namespace CryptoRiskAnalysis.API.Controllers;
 public sealed class MarketDataController(HistoricalMarketDataService history) : ControllerBase
 {
     [HttpGet("{assetId}/history")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<HistoricalMarketData>), StatusCodes.Status400BadRequest, "application/json")]
     public async Task<ActionResult<ApiResponse<HistoricalMarketData>>> GetHistory(string assetId,
         [FromQuery] int days = 30, [FromQuery] MarketDataSource? source = null,
         [FromQuery] DateOnly? endDate = null, CancellationToken cancellationToken = default)

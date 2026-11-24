@@ -34,8 +34,10 @@ export function Dashboard() {
     error,
     isRefetchError,
     retryAnalysis,
+    retryInSeconds,
     dataUpdatedAt,
   } = useRiskAnalysis(selectedAssetId, selectedTimeRange);
+  const retryBlocked = retryInSeconds > 0;
   return (
     <div className="min-h-screen bg-canvas px-4 py-5 text-ink sm:px-6 lg:px-8">
       <div className="mx-auto max-w-[1280px]">
@@ -75,7 +77,7 @@ export function Dashboard() {
             <button
               type="button"
               onClick={retryAnalysis}
-              disabled={isFetching || paused}
+              disabled={isFetching || paused || retryBlocked}
               className="control-button mb-1"
             >
               <RefreshCw
@@ -95,34 +97,38 @@ export function Dashboard() {
             quote={data?.currentQuote}
           />
           {(error || paused) && (
-            <div
-              className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-control bg-panel p-4"
-              role={data ? undefined : 'alert'}
-            >
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-control bg-panel p-4">
               <div className="flex min-w-0 flex-1 items-start gap-3">
                 <TriangleAlert
                   size={18}
                   className="mt-0.5 shrink-0 text-warning"
                   aria-hidden="true"
                 />
-                <p className="text-sm text-secondary">
-                  {paused ? (
-                    'Connection paused. Requests will resume when you are back online.'
-                  ) : (
-                    <>
-                      {data && 'Refresh failed: '}
-                      {getErrorMessage(error, selectedAsset.name)}
-                    </>
+                <div className="text-sm text-secondary">
+                  <p role={data ? undefined : 'alert'}>
+                    {paused ? (
+                      'Connection paused. Requests will resume when you are back online.'
+                    ) : (
+                      <>
+                        {data && 'Refresh failed: '}
+                        {getErrorMessage(error, selectedAsset.name)}
+                      </>
+                    )}
+                    {data && ' Showing the last successfully loaded data.'}
+                  </p>
+                  {retryBlocked && (
+                    <p role="timer" className="mt-1 tabular-nums">
+                      Retry in {retryInSeconds} {retryInSeconds === 1 ? 'second' : 'seconds'}.
+                    </p>
                   )}
-                  {data && ' Showing the last successfully loaded data.'}
-                </p>
+                </div>
               </div>
               {!paused && (
                 <button
                   type="button"
                   className="control-button"
                   onClick={retryAnalysis}
-                  disabled={isFetching}
+                  disabled={isFetching || retryBlocked}
                 >
                   {isFetching ? 'Retrying…' : 'Try again'}
                 </button>
@@ -169,8 +175,9 @@ export function Dashboard() {
               analytical indicators, not probabilities or investment advice.
             </p>
             <p className="mt-1">
-              Automatic fetch every 10 seconds while active. Quotes may be briefly cached by the
-              server. “Last fetched” records browser receipt, not the source price observation time.
+              Automatic fetch every 10 seconds while active, subject to API rate limits. Quotes may
+              be briefly cached by the server. “Last fetched” records browser receipt, not the
+              source price observation time.
             </p>
             {isRefetchError && (
               <p className="mt-1 text-warning">
